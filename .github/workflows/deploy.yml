@@ -18,19 +18,24 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
-          fetch-depth: 0 # Fetch all history for git info
+          fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
+          check-latest: true
           cache: npm
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
+      # 念のため npm の要求バージョンを満たす（Node 22 同梱 npm でもOKだが固定すると事故が減る）
+      - name: Ensure npm version
+        run: |
+          npm i -g npm@10.9.2
+          node -v
+          npm -v
+
+      - uses: actions/configure-pages@v5
 
       - name: Install Dependencies
         run: npm ci
@@ -53,4 +58,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-
