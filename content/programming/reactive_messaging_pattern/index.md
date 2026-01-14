@@ -75,48 +75,65 @@ graph TB
 
 ### 1. Simple Routers（シンプルルーター）
 
-最も基本的なルーティングパターンです。1つのメッセージを受け取り、条件に基づいて振り分けたり、分割したり、集約したりします。
+最も基本的なルーティングパターンです。1つのメッセージを受け取り、条件に基づいて振り分けたり、分割したり、集約したりします。これらは単独で使うこともできますし、組み合わせてより複雑な処理フローを構築することもできます。
 
 **含まれるパターン：**
 
-| パターン | 何をするか |
-|---------|-----------|
-| [[programming/reactive_messaging_pattern/simple-routers/message_router\|Message Router]] | 条件に基づいてメッセージを1つの宛先に振り分ける（基本概念） |
-| [[programming/reactive_messaging_pattern/simple-routers/content_based_router\|Content-Based Router]] | メッセージの中身を見て、宛先を決める |
-| [[programming/reactive_messaging_pattern/simple-routers/message_filter\|Message Filter]] | 条件に合わないメッセージを捨てる |
-| [[programming/reactive_messaging_pattern/simple-routers/dynamic_router\|Dynamic Router]] | ルーティングルールを後から変更できる |
-| [[programming/reactive_messaging_pattern/simple-routers/recipient_list\|Recipient List]] | 1つのメッセージを複数の宛先にコピーして送る |
-| [[programming/reactive_messaging_pattern/simple-routers/splitter\|Splitter]] | 1つのメッセージを複数のメッセージに分割する |
-| [[programming/reactive_messaging_pattern/simple-routers/aggregator\|Aggregator]] | 複数のメッセージを1つにまとめる |
-| [[programming/reactive_messaging_pattern/simple-routers/resequencer\|Resequencer]] | バラバラに届いたメッセージを正しい順番に並べ直す |
+#### 振り分け系（1つのメッセージを1つの宛先に送る）
+
+| パターン | 何をするか | 具体例 |
+|---------|-----------|-------|
+| [[programming/reactive_messaging_pattern/simple-routers/message_router\|Message Router]] | 条件に基づいてメッセージを1つの宛先に振り分ける、最も基本的なパターン。他のルーティングパターンの土台となる概念 | 交差点の交通整理員が車を振り分ける |
+| [[programming/reactive_messaging_pattern/simple-routers/content_based_router\|Content-Based Router]] | メッセージの中身（フィールドの値など）を見て宛先を決める。最も一般的に使われるルーター | 注文の商品カテゴリを見て、適切な倉庫システムに振り分ける |
+| [[programming/reactive_messaging_pattern/simple-routers/message_filter\|Message Filter]] | 条件に合わないメッセージを破棄して、条件に合うメッセージだけを通過させる | テスト用メッセージを本番環境から除去する |
+| [[programming/reactive_messaging_pattern/simple-routers/dynamic_router\|Dynamic Router]] | ルーティングルールを実行時に動的に変更できる。外部からルールを設定・更新可能 | A/Bテストで一部のトラフィックだけを新システムに流す |
+
+#### 分散系（1つのメッセージを複数の宛先に送る）
+
+| パターン | 何をするか | 具体例 |
+|---------|-----------|-------|
+| [[programming/reactive_messaging_pattern/simple-routers/recipient_list\|Recipient List]] | 1つのメッセージを複数の宛先にコピーして同時に送る。全ての宛先が同じメッセージを受け取る | 注文完了を在庫・配送・請求システムに同報する |
+| [[programming/reactive_messaging_pattern/simple-routers/splitter\|Splitter]] | 1つの大きなメッセージを複数の小さなメッセージに分割する | 3つの商品を含む注文を、商品ごとの3つのメッセージに分割する |
+
+#### 集約系（複数のメッセージを1つにまとめる）
+
+| パターン | 何をするか | 具体例 |
+|---------|-----------|-------|
+| [[programming/reactive_messaging_pattern/simple-routers/aggregator\|Aggregator]] | バラバラのタイミングで届く関連するメッセージを収集して、1つのメッセージにまとめる | 複数の見積もり回答を1つの比較表にまとめる |
+| [[programming/reactive_messaging_pattern/simple-routers/resequencer\|Resequencer]] | 順番がバラバラになって届いたメッセージを、正しい順番に並べ直す | ネットワーク遅延で順序が入れ替わったメッセージを復元する |
 
 詳細は [[programming/reactive_messaging_pattern/simple-routers/index|Simple Routers]] を参照してください。
 
 ### 2. Composed Routers（複合ルーター）
 
-Simple Routersを組み合わせて、より複雑な処理フローを実現するパターンです。
+Simple Routersを組み合わせて、より複雑な処理フローを実現するパターンです。実際のビジネスでは、単純なルーティングだけでは解決できない複雑な処理が必要になることが多く、そのような場面で活用されます。
 
 **含まれるパターン：**
 
-| パターン | 何をするか |
-|---------|-----------|
-| [[programming/reactive_messaging_pattern/composed-routers/scatter_gather\|Scatter-Gather]] | 複数のシステムに問い合わせて、回答を集める（例：複数業者への見積依頼） |
-| [[programming/reactive_messaging_pattern/composed-routers/composed_message_processor\|Composed Message Processor]] | メッセージを分割→各部分を処理→結果を統合 |
-| [[programming/reactive_messaging_pattern/composed-routers/routing_slip\|Routing Slip]] | メッセージに「処理ステップのリスト」を添付して、順番に処理させる |
-| [[programming/reactive_messaging_pattern/composed-routers/process_manager\|Process Manager]] | 複雑なワークフローを中央で管理する |
+| パターン | 何をするか | 構成要素 | 具体例 |
+|---------|-----------|---------|-------|
+| [[programming/reactive_messaging_pattern/composed-routers/scatter_gather\|Scatter-Gather]] | 同じリクエストを複数のシステムに同時に送り、返ってきた回答を収集して1つにまとめる | Recipient List + Aggregator | 複数の航空会社に見積もりを依頼し、最安値を選ぶ |
+| [[programming/reactive_messaging_pattern/composed-routers/composed_message_processor\|Composed Message Processor]] | メッセージを複数の部分に分割し、各部分を適切なシステムで処理してから、結果を再び1つに統合する | Splitter + Router + Aggregator | 複数商品の注文を商品ごとに在庫確認し、結果を統合する |
+| [[programming/reactive_messaging_pattern/composed-routers/routing_slip\|Routing Slip]] | メッセージに「処理ステップのリスト」を添付し、各ステップで処理後に次のステップに自動転送する。分散制御で中央管理者がいない | メッセージ添付のルート情報 | 稟議書の回覧（課長→部長→役員） |
+| [[programming/reactive_messaging_pattern/composed-routers/process_manager\|Process Manager]] | 中央にProcess Managerを配置して複雑なワークフロー全体を統括する。条件分岐やループ、並列処理が可能 | 中央コントローラー + 各ステップ | ローン審査プロセス（信用チェック→承認/差し戻し→契約） |
 
 詳細は [[programming/reactive_messaging_pattern/composed-routers/index|Composed Routers]] を参照してください。
 
 ### 3. Architectural Routers（アーキテクチャルーター）
 
-システム全体の設計に関わるパターンです。
+システム全体のメッセージングアーキテクチャを定義するパターンです。Simple RoutersやComposed Routersが「個々のメッセージをどう処理するか」を扱うのに対し、Architectural Routersは「システム全体をどのような構造で設計するか」という、より大きな視点での設計方針を示します。
 
 **含まれるパターン：**
 
-| パターン | 何をするか |
-|---------|-----------|
-| [[programming/reactive_messaging_pattern/architectural-routers/pipes_and_filters\|Pipes and Filters]] | 処理をパイプ（チャネル）とフィルター（処理ステップ）に分けて、柔軟に組み合わせる |
-| [[programming/reactive_messaging_pattern/architectural-routers/message_broker\|Message Broker]] | 中央にブローカーを置いて、全てのメッセージを仲介する |
+| パターン | 何をするか | 構造のイメージ | 主な用途 |
+|---------|-----------|--------------|---------|
+| [[programming/reactive_messaging_pattern/architectural-routers/pipes_and_filters\|Pipes and Filters]] | 処理を独立した小さなステップ（フィルター）に分けて、それらをパイプ（チャネル）で接続する。工場の組み立てラインのように、メッセージが各処理ステップを順番に通過していく | 線形のチェーン構造（A→B→C→D） | データ処理パイプライン、段階的なメッセージ処理、ETL処理 |
+| [[programming/reactive_messaging_pattern/architectural-routers/message_broker\|Message Broker]] | 中央に「ブローカー」を置き、全てのメッセージがブローカーを経由して送受信される。郵便局の中央仕分けセンターのように、全ての通信を仲介する | ハブ・アンド・スポーク構造（各システムが中央に接続） | 異種システム間の統合、エンタープライズ統合、マイクロサービス間通信 |
+
+**どちらを選ぶか：**
+- **データを段階的に処理・変換したい** → Pipes and Filters
+- **異なるシステム間でメッセージをやり取りしたい** → Message Broker
+- 実際のシステムでは、両方を組み合わせることも多い（Message Brokerの内部でPipes and Filtersを使うなど）
 
 詳細は [[programming/reactive_messaging_pattern/architectural-routers/index|Architectural Routers]] を参照してください。
 
