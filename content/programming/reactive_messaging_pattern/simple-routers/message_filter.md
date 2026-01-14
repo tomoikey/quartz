@@ -259,7 +259,6 @@ object FilterExample {
 | パターン | 関係 |
 |---------|------|
 | [[content_based_router\|Content-Based Router]] | Message Filterの一般化。複数の出力を持つ |
-| [[message_router\|Message Router]] | Message Filterの親パターン |
 | [[recipient_list\|Recipient List]] | 複数の宛先に送る点が異なる |
 
 ## 次に読むべき内容

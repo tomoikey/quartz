@@ -2,7 +2,7 @@
 
 ## このパターンは何をするのか
 
-Content-Based Routerは、**メッセージの中身（内容）を見て、宛先を決める**パターンです。[[message_router|Message Router]]の中で最も一般的な実装方法であり、実際のシステムで広く使われています。
+Content-Based Routerは、**メッセージの中身（内容）を見て、宛先を決める**パターンです。メッセージルーティングの中で最も一般的な実装方法であり、実際のシステムで広く使われています。
 
 ### 身近な例で考える
 
@@ -307,7 +307,6 @@ object ContentRouterExample {
 
 | パターン | 関係 |
 |---------|------|
-| [[message_router\|Message Router]] | Content-Based Routerの親パターン。Content-Based Routerは、Message Routerの「条件をメッセージの内容で判断する」という具体的な実装 |
 | [[message_filter\|Message Filter]] | Content-Based Routerと似ているが、条件に合わないメッセージを「捨てる」点が異なる |
 | [[dynamic_router\|Dynamic Router]] | ルーティングルールを実行時に変更できる。Content-Based Routerは通常、ルールが固定 |
 | [[splitter\|Splitter]] | メッセージを分割してから、Content-Based Routerで振り分けることが多い |

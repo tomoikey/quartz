@@ -359,7 +359,7 @@ object PipesAndFiltersExample {
 
 | パターン | 関係 |
 |---------|------|
-| [[message_router\|Message Router]] | パイプライン内で条件分岐が必要な場合に使用 |
+| [[content_based_router\|Content-Based Router]] | パイプライン内で条件分岐が必要な場合に使用 |
 | [[message_filter\|Message Filter]] | 特殊なフィルター（条件に合わないメッセージを除去） |
 | [[content_based_router\|Content-Based Router]] | メッセージ内容に基づいて分岐させる場合 |
 | [[message_broker\|Message Broker]] | より大規模なシステム統合のアーキテクチャ |
@@ -367,7 +367,7 @@ object PipesAndFiltersExample {
 ## 次に読むべき内容
 
 - [[message_broker|Message Broker]] - より大規模なシステム統合のアーキテクチャ
-- [[message_router|Message Router]] - パイプライン内での条件分岐
+- [[content_based_router|Content-Based Router]] - パイプライン内での条件分岐
 
 ## 参考資料
 

@@ -14,26 +14,9 @@ Simple Routersは、Message Routingの中で最も基本的なパターン群で
 
 これらのパターンは、受け取った1つのメッセージを、条件に基づいて1つの宛先に振り分けます。
 
-#### Message Router（メッセージルーター）
-
-**何をするか：** 条件に基づいてメッセージを1つの宛先に振り分ける、最も基本的なルーティングパターンです。他の全てのルーティングパターン（Content-Based Router、Message Filter、Dynamic Routerなど）の土台となる概念です。
-
-**身近な例：** 交差点の交通整理員が、車の行き先を見て「左へ」「右へ」と振り分けるイメージ。
-
-**使う場面：**
-- 注文の種類（通常注文/返品/法人注文など）に応じて、異なる処理システムに振り分けたいとき
-- メッセージの優先度に応じて、通常キューと優先キューに振り分けたいとき
-- シンプルな条件（例：フラグがON/OFF）でメッセージを2つの処理に分岐させたいとき
-
-**補足：** Message Routerは概念的なパターンであり、実際のシステムでは「何を見てルーティングするか」を具体化したContent-Based Router（メッセージの中身を見る）やDynamic Router（外部設定を見る）として実装されることが多いです。
-
-**詳細：** [[message_router|Message Router]]
-
----
-
 #### Content-Based Router（コンテンツベースルーター）
 
-**何をするか：** メッセージの中身（フィールドの値など）を見て、宛先を決定します。Message Routerの中で最も一般的な実装方法であり、実際のシステムで広く使われています。
+**何をするか：** メッセージの中身（フィールドの値など）を見て、宛先を決定します。メッセージルーティングの中で最も一般的なパターンであり、実際のシステムで広く使われています。
 
 **身近な例：** 空港の手荷物仕分けシステムが、荷物タグに書かれた行き先を読み取って、正しいターンテーブルに振り分けるイメージ。
 
@@ -184,7 +167,7 @@ Simple Routersは、状態を持つかどうかで2種類に分けられます�
 
 ### ステートレスなパターン
 
-Message Router、Content-Based Router、Message Filter、Dynamic Router、Recipient List、Splitter
+Content-Based Router、Message Filter、Dynamic Router、Recipient List、Splitter
 
 これらのパターンは、**メッセージを受け取ったらすぐに次に渡す**動作をします。「前に何を処理したか」を覚えておく必要がありません。
 
@@ -207,7 +190,7 @@ Aggregator、Resequencer
 
 | 特性 | ステートレス | ステートフル |
 |-----|------------|------------|
-| 対象パターン | Router, Filter, Splitter, Recipient List | Aggregator, Resequencer |
+| 対象パターン | Content-Based Router, Filter, Dynamic Router, Splitter, Recipient List | Aggregator, Resequencer |
 | 処理能力の向上 | 簡単（インスタンスを増やすだけ） | 難しい（状態の共有が必要） |
 | 障害からの復旧 | 簡単（再起動するだけ） | 状態の永続化・復元が必要 |
 | メモリ使用量 | 少ない | 多い（メッセージをバッファに保持） |
@@ -218,9 +201,11 @@ Simple Routersのパターンは、互いに関連しています。
 
 ```mermaid
 graph TB
-    MR[Message Router<br/>基本概念] --> CBR[Content-Based Router<br/>内容で振り分け]
-    MR --> MF[Message Filter<br/>条件で捨てる]
-    MR --> DR[Dynamic Router<br/>動的ルール]
+    subgraph "振り分け系"
+        CBR[Content-Based Router<br/>内容で振り分け]
+        MF[Message Filter<br/>条件で捨てる]
+        DR[Dynamic Router<br/>動的ルール]
+    end
 
     SP[Splitter<br/>分割] <--> AG[Aggregator<br/>集約]
     RL[Recipient List<br/>複数宛先] --> AG
@@ -228,16 +213,14 @@ graph TB
     AG --> RS[Resequencer<br/>順序復元]
 ```
 
-- **Message Router** は、他の振り分け系パターンの基本概念です
 - **Splitter** と **Aggregator** は逆の関係にあります（分割↔集約）
 - **Recipient List** で複数に送った結果を、**Aggregator** で集約することが多いです
 
 ## 次に読むべき内容
 
-1. まずは [[message_router|Message Router]] でルーティングの基本概念を理解する
-2. 次に [[content_based_router|Content-Based Router]] で実用的なルーティングを学ぶ
-3. 分散処理に興味があれば [[splitter|Splitter]] と [[aggregator|Aggregator]] を学ぶ
-4. パターンの組み合わせ方は [[programming/reactive_messaging_pattern/composed-routers/index|Composed Routers]] で学ぶ
+1. まずは [[content_based_router|Content-Based Router]] で最も一般的なルーティングを学ぶ
+2. 分散処理に興味があれば [[splitter|Splitter]] と [[aggregator|Aggregator]] を学ぶ
+3. パターンの組み合わせ方は [[programming/reactive_messaging_pattern/composed-routers/index|Composed Routers]] で学ぶ
 
 ## 関連するカテゴリ
 
