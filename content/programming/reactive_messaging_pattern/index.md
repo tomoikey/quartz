@@ -31,35 +31,13 @@ graph TB
         CR[Composed Routers<br/>複数ルーターの組み合わせ]
         AR[Architectural Routers<br/>システム全体の構造]
     end
-
-    SR --> CBR[Content-Based Router]
-    SR --> MF[Message Filter]
-    SR --> DR[Dynamic Router]
-    SR --> RL[Recipient List]
-    SR --> SP[Splitter]
-    SR --> AG[Aggregator]
-    SR --> RS[Resequencer]
-
-    CR --> CMP[Composed Message Processor]
-    CR --> SG[Scatter-Gather]
-    CR --> RSL[Routing Slip]
-    CR --> PM[Process Manager]
-
-    AR --> PF[Pipes and Filters]
-    AR --> MB[Message Broker]
 ```
 
-### Simple Routers 比較表
-
-| パターン | 消費 | 発行 | ステートフル | 特徴 |
-|---------|------|------|------------|------|
-| [[content_based_router\|Content-Based Router]] | 1 | 1 | No | 内容に基づき単一宛先へ |
-| [[message_filter\|Message Filter]] | 1 | 0-1 | No | 条件に合わないものを破棄 |
-| [[dynamic_router\|Dynamic Router]] | 1 | 1 | No | 制御メッセージでルール更新 |
-| [[recipient_list\|Recipient List]] | 1 | N | No | 複数宛先へコピー送信 |
-| [[splitter\|Splitter]] | 1 | N | No | メッセージを分割 |
-| [[aggregator\|Aggregator]] | N | 1 | **Yes** | 関連メッセージを集約 |
-| [[resequencer\|Resequencer]] | N | N | **Yes** | 順序を復元 |
+| カテゴリ | パターン数 | 概要 |
+|---------|-----------|------|
+| [[simple-routers/index\|Simple Routers]] | 8 | 単一メッセージの振り分け・分割・集約 |
+| [[composed-routers/index\|Composed Routers]] | 4 | 複数ルーターを組み合わせた複合フロー |
+| [[architectural-routers/index\|Architectural Routers]] | 2 | システム全体のアーキテクチャスタイル |
 
 ## 4. トレードオフと制約 (Critical Thinking)
 
@@ -79,49 +57,26 @@ graph TB
 - 単純な1対1通信にルーターを導入（過剰設計）
 - 全てのメッセージを単一ルーター経由にする（ボトルネック化）
 
-## 5. パターン選択ガイド
+## 5. カテゴリ別ガイド
 
-```mermaid
-flowchart TD
-    START[メッセージをどう処理したい？]
+各カテゴリの詳細な比較表とパターン選択ガイドは以下を参照：
 
-    START --> Q1{振り分け先は？}
-    Q1 -->|単一| Q2{振り分け基準は？}
-    Q1 -->|複数| Q3{振り分け先の決定方法は？}
-    Q1 -->|分割/集約| Q4{どの操作？}
-
-    Q2 -->|内容に基づく| CBR2[Content-Based Router]
-    Q2 -->|動的ルール| DR2[Dynamic Router]
-    Q2 -->|条件で破棄| MF2[Message Filter]
-
-    Q3 -->|メッセージ内容から計算| RL2[Recipient List]
-    Q3 -->|全員に放送| PS[Publish-Subscribe Channel]
-
-    Q4 -->|1→N分割| SP2[Splitter]
-    Q4 -->|N→1集約| AG2[Aggregator]
-    Q4 -->|順序復元| RS2[Resequencer]
-```
-
-### 複合パターンの組み合わせ
-
-| 組み合わせ | 名称 | 用途 |
-|-----------|------|------|
-| Recipient List + Aggregator | Scatter-Gather | 複数に問い合わせ→結果集約 |
-| Splitter + Router + Aggregator | Composed Message Processor | 複合メッセージの並列処理 |
-| 固定ステップの連鎖 | Routing Slip | 線形ワークフロー |
-| 動的ステップの制御 | Process Manager | 複雑なビジネスプロセス |
+- [[simple-routers/index|Simple Routers]] - 基本的なルーティングパターンの比較と選択
+- [[composed-routers/index|Composed Routers]] - 複合パターンの比較と選択
+- [[architectural-routers/index|Architectural Routers]] - アーキテクチャスタイルの比較
 
 ## 6. リンクと関係性 (Network Knowledge)
 
-### 関連パターン:
-- [[pipes_and_filters|Pipes and Filters]] - ルーターを接続するアーキテクチャスタイル
-- [[message_channel|Message Channel]] - ルーターを接続するパイプ
-- [[message_broker|Message Broker]] - ルーターを統合するハブ
+### カテゴリ:
+- [[simple-routers/index|Simple Routers]] - 単一メッセージの振り分け
+- [[composed-routers/index|Composed Routers]] - 複合フロー
+- [[architectural-routers/index|Architectural Routers]] - アーキテクチャスタイル
 
-### 構成要素:
+### 関連概念:
+- [[message_channel|Message Channel]] - ルーターを接続するパイプ
 - [[message|Message]] - ルーティング対象のデータ
 - [[message_endpoint|Message Endpoint]] - メッセージの送受信点
 
 ### 次のステップ:
-- [[content_based_router|Content-Based Router]] - 最も基本的なルーティングパターン
-- [[pipes_and_filters|Pipes and Filters]] - 全体アーキテクチャの理解
+- [[simple-routers/index|Simple Routers]] - 基本パターンから学ぶ
+- [[architectural-routers/pipes_and_filters|Pipes and Filters]] - 全体アーキテクチャの理解
