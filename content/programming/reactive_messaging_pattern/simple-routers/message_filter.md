@@ -1,55 +1,92 @@
 # Message Filter
 
-## 1. 3行要約 (Feynman Technique)
-> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
-- 「選別するザル」のような役割。条件に合うメッセージだけを通過させ、それ以外は捨てる
-- Content-Based Routerの特殊形で、出力チャネルが1つしかない（通過 or 破棄）
-- 核心的価値：**不要なメッセージの除外**
+## このパターンは何をするのか
 
-## 2. 解決する課題 (Context & Problem)
-> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
+Message Filterは、**条件に合うメッセージだけを通過させ、それ以外は捨てる**パターンです。[[content_based_router|Content-Based Router]]の特殊なケースで、「通過」か「破棄」の2択しかありません。
 
-- **Before:**
-  - Publish-Subscribe Channelで全メッセージを受信するが、関心があるのは一部のみ
-  - 例：ウィジェットにのみ関心のある顧客が、ガジェットの価格変更通知も受け取ってしまう
-  - 不要なメッセージの処理にリソースが浪費される
+### 身近な例で考える
 
-- **Trigger:**
-  - 顧客が受け取りたくないメッセージを避けたい
-  - 特定の条件に合致するメッセージのみを処理したい
-  - 下流のシステムに不要なメッセージを流したくない
+スパムメールのフィルターを想像してください。
 
-## 3. ソリューションと構造 (Structure & Visual)
-> **目的:** Dual Coding（文字と図）により記憶定着を図る。
-
-### 仕組み
-特殊なMessage Routerである Message Filter を使用して、条件セットに基づいてチャネルから不要なメッセージを除去する。
-
-- 単一の出力チャネルを持つ
-- メッセージ内容が基準と一致すれば出力チャネルにルーティング
-- 一致しなければメッセージは破棄される
-
-### 構造図
+メールソフトは、届いたメールを検査して、スパムの特徴（怪しい送信者、特定のキーワードなど）があるかどうかをチェックします。条件に合致しなければ受信トレイに入れ、合致すればゴミ箱に捨てます。
 
 ```mermaid
 graph LR
-    subgraph "Message Filter"
-        IN[入力チャネル] --> MF{Message<br/>Filter}
-        MF -->|条件一致| OUT[出力チャネル]
-        MF -.->|条件不一致| DISCARD((破棄))
-    end
+    M1["メール<br/>(差出人: 友人)"] --> F{フィルター}
+    M2["メール<br/>(差出人: 怪しい)"] --> F
+    F -->|通過| INBOX["受信トレイへ ✓"]
+    F -.->|除外| TRASH["ゴミ箱へ ✗"]
+
+    style F fill:#ffcc80
+    style INBOX fill:#a5d6a7
+    style TRASH fill:#ffcdd2
+```
+
+Message Filterも同じです。メッセージの中身を見て、条件に合えば次の処理に渡し、合わなければ捨てます。
+
+## なぜMessage Filterが必要なのか
+
+### 問題の背景
+
+メッセージングシステムでは、**受信者が関心のないメッセージも受け取ってしまう**ことがあります。
+
+例えば、商品価格の更新通知を受け取るシステムを考えてみましょう。Publish-Subscribe Channel（全員に配信するチャネル）を使っている場合、全ての商品の価格更新が届きます。
+
+```mermaid
+graph TB
+    PRICE[価格更新システム] -->|全ての価格更新を配信| RECV[受信者A<br/>ウィジェットにしか興味がない]
+    RECV --> W["ウィジェットの価格更新<br/>→ 処理する ✓"]
+    RECV --> G["ガジェットの価格更新<br/>→ 処理したくない ✗"]
+
+    style W fill:#a5d6a7
+    style G fill:#ffcdd2
+```
+
+### Message Filterがない場合の問題
+
+**問題1: 不要なメッセージの処理にリソースが浪費される**
+
+関心のないメッセージも受け取って処理しようとするため、CPUやメモリが無駄に使われます。
+
+**問題2: 下流のシステムに不要なメッセージが流れる**
+
+フィルターがなければ、不要なメッセージが次のシステムに流れ、そこでも処理が発生します。
+
+**問題3: ビジネスロジックが複雑になる**
+
+「このメッセージは処理対象か？」という判断を、本来のビジネスロジックの中に埋め込む必要があります。
+
+### Message Filterを使うと
+
+Message Filterを使うと、不要なメッセージを早い段階で除去できます。
+
+```mermaid
+graph LR
+    IN[全ての価格更新] --> MF{Message<br/>Filter}
+    MF -->|ウィジェット| OUT[次の処理へ]
+    MF -.->|ガジェット等| DISCARD((破棄))
 
     style MF fill:#ffcc80
     style DISCARD fill:#ffcdd2
 ```
 
-### 処理フロー
+## Message Filterの仕組み
+
+### 基本的な動作
+
+Message Filterは以下のステップで動作します。
+
+1. **メッセージを受け取る**
+2. **設定された条件でメッセージを検査する**
+3. **条件に合致すれば次の処理に渡す、合致しなければ破棄する**
+
+### 処理の流れ
 
 ```mermaid
 sequenceDiagram
-    participant IN as 入力チャネル
+    participant IN as 入力
     participant MF as Message Filter
-    participant OUT as 出力チャネル
+    participant OUT as 次の処理
 
     IN->>MF: Message(type=Widget)
     Note over MF: Widget? ✓
@@ -60,133 +97,176 @@ sequenceDiagram
     Note over MF: 破棄
 ```
 
-## 4. トレードオフと制約 (Critical Thinking)
+### Content-Based Routerとの違い
 
-### Pros (利点):
-- **シンプル**: 単一条件で通過/破棄を決定
-- **リソース節約**: 不要なメッセージの処理を回避
-- **下流保護**: 下流システムに不要なメッセージが流れない
-- **選択的購読**: Pub/Subパターンと組み合わせて選択的受信を実現
+Message FilterとContent-Based Routerは似ていますが、出力の数が違います。
 
-### Cons (欠点・副作用):
-- **メッセージ損失**: 破棄されたメッセージは復元不可
-- **監査困難**: 破棄されたメッセージの追跡が難しい
-- **設定ミスのリスク**: 誤った条件設定で必要なメッセージが破棄される
-- **デバッグ困難**: 「なぜメッセージが届かないか」の原因特定が難しい
+| パターン | 出力チャネル数 | 動作 |
+|---------|--------------|------|
+| Content-Based Router | 複数 | 条件に応じて異なる宛先にルーティング |
+| Message Filter | 1つ | 条件に合えば通過、合わなければ破棄 |
 
-### Anti-Pattern:
-- 破棄理由のログを残さない
-- 複雑なビジネスロジックをフィルターに入れる
-- 本来はContent-Based Routerを使うべき場面でMessage Filterを使う
+Message Filterは、「必要なメッセージだけを通す」という単純な目的に特化しています。
 
-## 5. 実装イメージ (Implementation)
+## Message Filterのメリットとデメリット
+
+### メリット
+
+**シンプルで分かりやすい**
+
+「通過」か「破棄」の2択なので、動作が明確です。
+
+**リソースを節約できる**
+
+不要なメッセージを早い段階で除去することで、下流のシステムの負荷を減らせます。
+
+**下流のシステムを保護できる**
+
+不要なメッセージが流れないので、下流のシステムは自分が処理すべきメッセージだけを受け取れます。
+
+**Publish-Subscribeと組み合わせて選択的受信を実現できる**
+
+「全員に配信」するチャネルから、関心のあるメッセージだけを受け取ることができます。
+
+### デメリット
+
+**破棄されたメッセージは復元できない**
+
+一度破棄されたメッセージは、後から取り戻すことができません。
+
+**破棄されたメッセージの追跡が難しい**
+
+「なぜメッセージが届かなかったのか」をデバッグするのが難しくなります。
+
+**設定ミスで必要なメッセージが破棄されるリスク**
+
+フィルター条件を間違えると、本来必要なメッセージが捨てられてしまいます。
+
+### やってはいけないこと
+
+**破棄理由のログを残さない**
+
+デバッグのために、なぜメッセージが破棄されたかをログに残すべきです。
+
+**複雑なビジネスロジックをフィルターに入れる**
+
+フィルターは「通過/破棄」の判断だけを行い、複雑な処理は後続のシステムで行うべきです。
+
+**本来はContent-Based Routerを使うべき場面でMessage Filterを使う**
+
+複数の宛先に振り分けたい場合は、Content-Based Routerを使いましょう。
+
+## 実装例
 
 ### Akka Typed Actor (Scala)
+
+以下は、ウィジェットの価格更新だけを通過させるMessage Filterの実装例です。
 
 ```scala
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
 
-// メッセージ定義
+// 価格更新メッセージ
 sealed trait PriceUpdate
 case class WidgetPriceUpdate(productId: String, price: Double) extends PriceUpdate
 case class GadgetPriceUpdate(productId: String, price: Double) extends PriceUpdate
 
-// Message Filter
+// 汎用的なMessage Filter
 object MessageFilter {
   def apply[T](
+    // 通過条件を判定する関数
     predicate: T => Boolean,
+    // 条件に合致したメッセージの送信先
     output: ActorRef[T],
+    // 破棄時のコールバック（ログ用など）
     onDiscard: Option[T => Unit] = None
   ): Behavior[T] =
     Behaviors.receive { (context, message) =>
       if (predicate(message)) {
-        context.log.info(s"Message passed filter: $message")
+        // 条件に合致 → 通過
+        context.log.info(s"メッセージを通過させます: $message")
         output ! message
       } else {
-        context.log.info(s"Message discarded: $message")
-        onDiscard.foreach(_(message))
+        // 条件に合致しない → 破棄
+        context.log.info(s"メッセージを破棄します: $message")
+        onDiscard.foreach(_(message))  // 破棄をログに記録
       }
       Behaviors.same
     }
 }
 
-// Widget専用フィルター
+// ウィジェット専用フィルター
 object WidgetFilter {
   def apply(output: ActorRef[PriceUpdate]): Behavior[PriceUpdate] =
     Behaviors.receive { (context, message) =>
       message match {
         case w: WidgetPriceUpdate =>
-          context.log.info(s"Widget price update passed: ${w.productId}")
+          context.log.info(s"ウィジェットの価格更新を通過: ${w.productId}")
           output ! w
-        case _ =>
-          context.log.debug(s"Non-widget message discarded")
+        case other =>
+          context.log.debug(s"ウィジェット以外のメッセージを破棄: $other")
+          // 何もしない（破棄）
       }
       Behaviors.same
     }
 }
 
-// 型安全な汎用フィルター
-object TypedMessageFilter {
-  sealed trait Command[+T]
-  case class Filter[T](message: T) extends Command[T]
-
-  def apply[T, U <: T](
-    output: ActorRef[U]
-  )(implicit ev: scala.reflect.ClassTag[U]): Behavior[Command[T]] =
-    Behaviors.receive { (context, command) =>
-      command match {
-        case Filter(message) =>
-          message match {
-            case u: U =>
-              context.log.info(s"Message matched type filter")
-              output ! u
-            case _ =>
-              context.log.debug(s"Message did not match type filter")
-          }
-          Behaviors.same
-      }
-    }
-}
-
 // 使用例
 object FilterExample {
-  def apply(): Behavior[Nothing] =
+  def setup(): Behavior[Nothing] =
     Behaviors.setup[Nothing] { context =>
+      // ウィジェットの価格更新を処理するシステム
       val widgetProcessor = context.spawn(
         Behaviors.receiveMessage[PriceUpdate] { msg =>
-          println(s"Processing widget: $msg")
+          println(s"ウィジェットを処理: $msg")
           Behaviors.same
         },
         "widgetProcessor"
       )
 
+      // フィルターを作成
       val filter = context.spawn(
         WidgetFilter(widgetProcessor),
         "widgetFilter"
       )
 
-      // WidgetのみがwidgetProcessorに届く
-      filter ! WidgetPriceUpdate("W001", 29.99)  // 通過
-      filter ! GadgetPriceUpdate("G001", 49.99)  // 破棄
+      // メッセージを送信
+      filter ! WidgetPriceUpdate("W001", 29.99)  // 通過 ✓
+      filter ! GadgetPriceUpdate("G001", 49.99)  // 破棄 ✗
+      filter ! WidgetPriceUpdate("W002", 19.99)  // 通過 ✓
 
       Behaviors.empty
     }
 }
 ```
 
-## 6. リンクと関係性 (Network Knowledge)
+### コードのポイント
 
-### 関連パターン:
-- [[content_based_router|Content-Based Router]] (汎化: Message Filterは出力が1つの特殊ケース)
-- [[message_router|Message Router]] (汎化: 親パターン)
-- [[selective_consumer|Selective Consumer]] (比較: 消費者側でフィルタリング)
-- [[recipient_list|Recipient List]] (比較: 複数宛先への送信)
+**条件判定をシンプルに**
 
-### 構成要素:
-- [[message_channel|Message Channel]] - 入出力チャネル
-- [[publish_subscribe_channel|Publish-Subscribe Channel]] - 組み合わせて選択的購読を実現
+`predicate` 関数で「通過するかどうか」だけを判定しています。複雑なビジネスロジックは入れません。
 
-### 次のステップ:
+**破棄時のコールバック**
+
+`onDiscard` で、メッセージが破棄されたときにログを記録できます。デバッグに役立ちます。
+
+**型による判定**
+
+`WidgetFilter` では、Scalaのパターンマッチングを使って、メッセージの型（`WidgetPriceUpdate`）でフィルタリングしています。
+
+## 関連するパターン
+
+| パターン | 関係 |
+|---------|------|
+| [[content_based_router\|Content-Based Router]] | Message Filterの一般化。複数の出力を持つ |
+| [[message_router\|Message Router]] | Message Filterの親パターン |
+| [[recipient_list\|Recipient List]] | 複数の宛先に送る点が異なる |
+
+## 次に読むべき内容
+
 - [[content_based_router|Content-Based Router]] - 破棄ではなく振り分けが必要な場合
-- [[recipient_list|Recipient List]] - 複数宛先への送信が必要な場合
+- [[recipient_list|Recipient List]] - 複数の宛先に送りたい場合
+
+## 参考資料
+
+- [Enterprise Integration Patterns - Message Filter](https://www.enterpriseintegrationpatterns.com/patterns/messaging/Filter.html)

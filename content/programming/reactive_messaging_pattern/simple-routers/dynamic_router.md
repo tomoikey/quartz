@@ -1,161 +1,250 @@
 # Dynamic Router
 
-## 1. 3行要約 (Feynman Technique)
-> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
-- 「学習するカーナビ」のような役割。受信者からのフィードバックを受けて、ルーティングルールを動的に更新する
-- 制御チャネル経由で受信者が自身の処理条件を登録し、ルーターがそれに基づいてルーティング
-- 核心的価値：**ルーターが全受信者に依存せずに済む自己構成機能**
+## このパターンは何をするのか
 
-## 2. 解決する課題 (Context & Problem)
-> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
+Dynamic Routerは、**ルーティングルールを後から変更できる**パターンです。[[content_based_router|Content-Based Router]]ではルールが固定されていますが、Dynamic Routerでは実行中にルールを追加・変更・削除できます。
 
-- **Before:**
-  - ルーターが全ての潜在的な宛先をハードコードで知っている必要がある
-  - 新しい受信者を追加するたびにルーターの再設定・再デプロイが必要
-  - ルーターと受信者が密結合になり、保守負担が増大
+### 身近な例で考える
 
-- **Trigger:**
-  - ルーターが全ての潜在的な宛先に依存することを避けたい
-  - 受信者の追加・削除を動的に行いたい
-  - 効率的で予測可能なルーティングを維持しながら柔軟性を確保したい
+学習するカーナビを想像してください。
 
-## 3. ソリューションと構造 (Structure & Visual)
-> **目的:** Dual Coding（文字と図）により記憶定着を図る。
+通常のカーナビは、地図データに基づいて決まったルートを案内します。しかし、学習するカーナビは、新しい道路ができたり、渋滞情報が更新されたりすると、その情報を取り込んでルートを変更します。
 
-### 仕組み
-ルーターが特別な設定メッセージに基づいて自己構成できる Dynamic Router を使用する。
+```mermaid
+graph TB
+    subgraph "普通のカーナビ"
+        N1[最初に設定された<br/>ルール] --> R1[固定ルートを案内]
+    end
 
-- 追加の制御チャネルを利用
-- 起動時に各受信者が制御チャネル経由で自身の存在と処理条件を通知
-- ルーターがこれらの「優先設定（preferences）」をルールベースに保存
-- メッセージ到着時にすべてのルールを評価して最適な受信者にルーティング
+    subgraph "学習するカーナビ"
+        NEW_ROAD[新しい道路ができた] --> UPDATE1[ルールを更新]
+        TRAFFIC[渋滞情報が入った] --> UPDATE2[ルールを更新]
+        UPDATE1 --> NEW_ROUTE[新しいルートを案内]
+        UPDATE2 --> ALT_ROUTE[別のルートを案内]
+    end
 
-### 構造図
+    style UPDATE1 fill:#a5d6a7
+    style UPDATE2 fill:#a5d6a7
+```
+
+Dynamic Routerも同じです。受信者が「自分はこういうメッセージを処理できます」と登録したり、登録を解除したりすることで、ルーティングルールが動的に変わります。
+
+## なぜDynamic Routerが必要なのか
+
+### 問題の背景
+
+[[content_based_router|Content-Based Router]]では、ルーティングルールがコードや設定ファイルに固定されています。新しい受信者を追加したい場合、以下の手順が必要です。
+
+1. ルーターの設定を変更する
+2. ルーターを再デプロイする
+3. システム全体を再起動する（場合によっては）
+
+これでは、受信者の追加・削除が頻繁に発生するシステムには対応できません。
+
+### Dynamic Routerがない場合の問題
+
+**問題1: ルーターが全ての受信者をハードコードで知っている必要がある**
+
+新しいシステムを追加するたびに、ルーターのコードを修正しなければなりません。
+
+**問題2: ルーターの変更が難しい**
+
+本番環境でルーターを変更するには、再デプロイが必要で、ダウンタイムが発生する可能性があります。
+
+**問題3: ルーターと受信者が密結合になる**
+
+ルーターが受信者の詳細を知っているため、どちらかを変更すると他方にも影響が出ます。
+
+### Dynamic Routerを使うと
+
+Dynamic Routerを使うと、受信者が自分自身をルーターに登録できます。ルーターは受信者の詳細をハードコードで知る必要がなく、登録情報に基づいてルーティングします。
+
+```mermaid
+graph TB
+    subgraph "Dynamic Router"
+        DR{Dynamic<br/>Router}
+
+        R1[受信者A] -->|登録: type=Widget| DR
+        R2[受信者B] -->|登録: type=Gadget| DR
+        R3[受信者C] -->|登録: type=Tool| DR
+
+        IN[入力] --> DR
+        DR -->|type=Widget| R1
+        DR -->|type=Gadget| R2
+        DR -->|type=Tool| R3
+    end
+
+    style DR fill:#ffcc80
+```
+
+## Dynamic Routerの仕組み
+
+### 基本的な動作
+
+Dynamic Routerは2つのチャネルを持っています。
+
+1. **入力チャネル**: 通常のメッセージを受け取る
+2. **制御チャネル**: ルーティングルールの登録・解除を受け取る
 
 ```mermaid
 graph TB
     subgraph "Dynamic Router Pattern"
-        DR{Dynamic<br/>Router}
-
-        subgraph "Control Channel"
-            R1[Recipient 1] -->|登録: type=A| CC[Control<br/>Channel]
-            R2[Recipient 2] -->|登録: type=B| CC
-            R3[Recipient 3] -->|登録: type=C| CC
-        end
-
-        CC --> DR
-        DR -->|ルールDB更新| RULES[(Rule<br/>Base)]
-
-        IN[Input Channel] --> DR
-        DR -->|type=A| R1
-        DR -->|type=B| R2
-        DR -->|type=C| R3
+        CC[制御チャネル] -->|ルール登録/解除| DR{Dynamic<br/>Router}
+        IN[入力チャネル] -->|メッセージ| DR
+        DR --> RULES[(ルール<br/>データベース)]
+        DR --> R1[受信者1]
+        DR --> R2[受信者2]
     end
 
     style DR fill:#ffcc80
     style CC fill:#e1f5fe
 ```
 
-### 登録フロー
+### 登録の流れ
+
+受信者がシステムに参加するとき、以下の流れで自分自身を登録します。
 
 ```mermaid
 sequenceDiagram
-    participant R1 as Recipient 1
-    participant CC as Control Channel
+    participant R1 as 受信者（新規）
+    participant CC as 制御チャネル
     participant DR as Dynamic Router
-    participant RB as Rule Base
+    participant RB as ルールDB
 
-    Note over DR: システム起動
-    R1->>CC: Register(conditions=[type=Widget])
-    CC->>DR: Registration Message
-    DR->>RB: Add Rule(type=Widget → R1)
+    Note over R1: システム起動
+    R1->>CC: 登録(条件=type:Widget, 送信先=自分)
+    CC->>DR: 登録メッセージ
+    DR->>RB: ルール追加
 
-    Note over DR: メッセージ到着
-    DR->>RB: Lookup(type=Widget)
-    RB-->>DR: Recipient 1
-    DR->>R1: Message
+    Note over DR: メッセージ受信時
+    DR->>RB: ルール検索(type:Widget)
+    RB-->>DR: 受信者1
+    DR->>R1: メッセージを送信
 ```
 
-## 4. トレードオフと制約 (Critical Thinking)
+### Content-Based Routerとの違い
 
-### Pros (利点):
-- **疎結合**: ルーターが受信者をハードコードで知らなくて良い
-- **動的構成**: 受信者の追加・削除にルーターの再デプロイ不要
-- **自己登録**: 受信者が自身の処理条件を宣言
-- **保守性向上**: ルーターの変更頻度が減少
+| 観点 | Content-Based Router | Dynamic Router |
+|-----|---------------------|----------------|
+| ルール管理 | コードや設定ファイルに固定 | 実行時に動的に変更可能 |
+| 受信者の追加 | ルーターの再デプロイが必要 | 登録メッセージを送るだけ |
+| 結合度 | ルーターが受信者を知っている | 受信者が自分をルーターに登録 |
+| 複雑性 | シンプル | 制御チャネルとルールDBが必要 |
 
-### Cons (欠点・副作用):
-- **複雑性増加**: 制御チャネルとルールベースの管理が必要
-- **一貫性リスク**: 登録メッセージの損失でルーティング不整合が発生
-- **起動順序依存**: 受信者がルーターより先に起動する必要がある場合がある
-- **状態管理**: ルールベースの永続化・復旧の考慮が必要
+## Dynamic Routerのメリットとデメリット
 
-### Anti-Pattern:
-- 制御チャネルの信頼性を考慮しない
-- ルールベースのバックアップ・復旧を考慮しない
-- 受信者のヘルスチェックなしで古いルールを保持し続ける
+### メリット
 
-## 5. 実装イメージ (Implementation)
+**受信者の追加・削除にルーターの変更が不要**
+
+新しい受信者は、登録メッセージを送るだけでルーティング対象になります。ルーターのコードを変更する必要はありません。
+
+**ルーターと受信者の疎結合を実現**
+
+ルーターは受信者の詳細を知る必要がなく、登録された情報に基づいてルーティングするだけです。
+
+**受信者が自分の処理条件を宣言できる**
+
+受信者自身が「自分はこういうメッセージを処理できる」と宣言するので、責務が明確になります。
+
+### デメリット
+
+**制御チャネルとルールDBの管理が必要**
+
+追加のインフラストラクチャが必要になり、システムが複雑になります。
+
+**登録メッセージが失われるリスク**
+
+制御チャネルの信頼性が低いと、登録メッセージが失われ、ルーティングが正しく行われなくなる可能性があります。
+
+**起動順序に依存する場合がある**
+
+受信者がルーターより先に起動して登録する必要がある場合、起動順序を管理する必要があります。
+
+**古いルールが残る可能性**
+
+受信者がクラッシュしても、ルールDBには登録が残っている可能性があります。
+
+### やってはいけないこと
+
+**制御チャネルの信頼性を考慮しない**
+
+登録メッセージが失われると、ルーティングが正しく行われません。永続的なメッセージングや確認応答を検討しましょう。
+
+**受信者のヘルスチェックをしない**
+
+クラッシュした受信者へのルーティングが続くと、メッセージが失われます。定期的なヘルスチェックや、ルールの有効期限を設定しましょう。
+
+**ルールDBのバックアップを取らない**
+
+システム障害時にルールが失われると、全ての受信者が再登録する必要があります。
+
+## 実装例
 
 ### Akka Typed Actor (Scala)
+
+以下は、受信者が自己登録できるDynamic Routerの実装例です。
 
 ```scala
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
 
-// メッセージ定義
-sealed trait Message
-case class OrderMessage(id: String, orderType: String, content: String) extends Message
+// 処理対象のメッセージ
+sealed trait OrderMessage
+case class Order(id: String, orderType: String, amount: Double) extends OrderMessage
 
-// 制御チャネル用メッセージ
+// 制御チャネル用のメッセージ
 sealed trait ControlMessage
 case class Register(
   recipientId: String,
-  condition: Message => Boolean,
-  destination: ActorRef[Message]
+  condition: OrderMessage => Boolean,
+  destination: ActorRef[OrderMessage]
 ) extends ControlMessage
 case class Unregister(recipientId: String) extends ControlMessage
 
-// Dynamic Router
+// Dynamic Routerの実装
 object DynamicRouter {
+  // ルーターが受け取るコマンド
   sealed trait Command
-  case class Route(message: Message) extends Command
+  case class Route(message: OrderMessage) extends Command
   case class Control(controlMessage: ControlMessage) extends Command
 
+  // ルーティングルールを表すデータ
   case class RoutingRule(
     recipientId: String,
-    condition: Message => Boolean,
-    destination: ActorRef[Message]
+    condition: OrderMessage => Boolean,
+    destination: ActorRef[OrderMessage]
   )
 
-  def apply(defaultRoute: ActorRef[Message]): Behavior[Command] =
+  def apply(defaultRoute: ActorRef[OrderMessage]): Behavior[Command] =
     router(Map.empty, defaultRoute)
 
   private def router(
     rules: Map[String, RoutingRule],
-    defaultRoute: ActorRef[Message]
+    defaultRoute: ActorRef[OrderMessage]
   ): Behavior[Command] =
     Behaviors.receive { (context, command) =>
       command match {
         // 制御チャネルからの登録
         case Control(Register(recipientId, condition, destination)) =>
-          context.log.info(s"Registered recipient: $recipientId")
+          context.log.info(s"受信者を登録: $recipientId")
           val newRule = RoutingRule(recipientId, condition, destination)
           router(rules + (recipientId -> newRule), defaultRoute)
 
         // 登録解除
         case Control(Unregister(recipientId)) =>
-          context.log.info(s"Unregistered recipient: $recipientId")
+          context.log.info(s"受信者を登録解除: $recipientId")
           router(rules - recipientId, defaultRoute)
 
-        // メッセージルーティング
+        // 通常のメッセージルーティング
         case Route(message) =>
+          // 条件に一致する最初のルールを探す
           val destination = rules.values
             .find(_.condition(message))
             .map(_.destination)
             .getOrElse(defaultRoute)
 
-          context.log.info(s"Routing to: ${destination.path.name}")
+          context.log.info(s"メッセージを ${destination.path.name} にルーティング")
           destination ! message
           Behaviors.same
       }
@@ -163,20 +252,21 @@ object DynamicRouter {
 }
 
 // 受信者（起動時に自己登録）
-object Recipient {
+object OrderProcessor {
   def apply(
     id: String,
     router: ActorRef[DynamicRouter.Command],
-    condition: Message => Boolean
-  ): Behavior[Message] =
+    condition: OrderMessage => Boolean
+  ): Behavior[OrderMessage] =
     Behaviors.setup { context =>
       // 起動時にルーターへ自己登録
+      context.log.info(s"$id がルーターに登録中...")
       router ! DynamicRouter.Control(
         Register(id, condition, context.self)
       )
 
       Behaviors.receiveMessage { message =>
-        context.log.info(s"$id received: $message")
+        context.log.info(s"$id がメッセージを受信: $message")
         Behaviors.same
       }
     }
@@ -184,55 +274,77 @@ object Recipient {
 
 // 使用例
 object DynamicRouterExample {
-  def apply(): Behavior[Nothing] =
+  def setup(): Behavior[Nothing] =
     Behaviors.setup[Nothing] { context =>
+      // デフォルトの処理先
       val defaultHandler = context.spawn(
-        Behaviors.receiveMessage[Message] { msg =>
-          println(s"Default handler: $msg")
+        Behaviors.receiveMessage[OrderMessage] { msg =>
+          println(s"デフォルト処理: $msg")
           Behaviors.same
         },
         "defaultHandler"
       )
 
+      // Dynamic Routerを作成
       val router = context.spawn(
         DynamicRouter(defaultHandler),
         "dynamicRouter"
       )
 
-      // 受信者が自己登録（条件付き）
+      // 受信者を作成（起動時に自己登録される）
       context.spawn(
-        Recipient("widgetHandler", router, {
-          case OrderMessage(_, "Widget", _) => true
+        OrderProcessor("widgetHandler", router, {
+          case Order(_, "Widget", _) => true
           case _ => false
         }),
         "widgetHandler"
       )
 
       context.spawn(
-        Recipient("gadgetHandler", router, {
-          case OrderMessage(_, "Gadget", _) => true
+        OrderProcessor("gadgetHandler", router, {
+          case Order(_, "Gadget", _) => true
           case _ => false
         }),
         "gadgetHandler"
       )
+
+      // メッセージを送信
+      router ! DynamicRouter.Route(Order("001", "Widget", 100))
+      router ! DynamicRouter.Route(Order("002", "Gadget", 200))
+      router ! DynamicRouter.Route(Order("003", "Unknown", 300))  // デフォルトへ
 
       Behaviors.empty
     }
 }
 ```
 
-## 6. リンクと関係性 (Network Knowledge)
+### コードのポイント
 
-### 関連パターン:
-- [[content_based_router|Content-Based Router]] (比較: 静的ルール vs 動的ルール)
-- [[message_filter|Message Filter]] (比較: 動的フィルタリング条件の更新に使用可能)
-- [[recipient_list|Recipient List]] (比較: 動的な受信者リストの構築)
-- [[publish_subscribe_channel|Publish-Subscribe Channel]] (比較: 受信者主導 vs 送信者主導)
+**制御チャネルと入力チャネルの分離**
 
-### 構成要素:
-- [[message_channel|Message Channel]] - 入出力チャネル
-- [[control_bus|Control Bus]] - 制御メッセージの配信
+`Control` メッセージでルール登録、`Route` メッセージで通常のルーティングを行っています。
 
-### 次のステップ:
-- [[recipient_list|Recipient List]] - 複数宛先への動的送信
+**受信者の自己登録**
+
+`OrderProcessor` は起動時に `router ! DynamicRouter.Control(Register(...))` で自分自身を登録しています。ルーターは受信者の詳細を知る必要がありません。
+
+**デフォルトルート**
+
+どのルールにも一致しないメッセージのために、`defaultRoute` を用意しています。
+
+## 関連するパターン
+
+| パターン | 関係 |
+|---------|------|
+| [[content_based_router\|Content-Based Router]] | Dynamic Routerの静的バージョン。ルールが固定 |
+| [[recipient_list\|Recipient List]] | 動的な受信者リストの構築に使用可能 |
+| [[message_filter\|Message Filter]] | 動的なフィルタリング条件の更新に使用可能 |
+
+## 次に読むべき内容
+
+- [[recipient_list|Recipient List]] - 複数の宛先に動的に送信する場合
 - [[routing_slip|Routing Slip]] - 動的なルーティング経路の指定
+
+## 参考資料
+
+- [Enterprise Integration Patterns - Dynamic Router](https://www.enterpriseintegrationpatterns.com/patterns/messaging/DynamicRouter.html)

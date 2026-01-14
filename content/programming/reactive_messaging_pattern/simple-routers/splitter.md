@@ -1,107 +1,217 @@
 # Splitter
 
-## 1. 3行要約 (Feynman Technique)
-> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
-- 「宅配便の仕分け」のような役割。複数の荷物が入った大きな箱を開けて、個別の荷物に分けて配送先ごとに振り分ける
-- 複合メッセージ（例：複数の注文アイテムを含む注文）を個別のメッセージに分割
-- 核心的価値：**複合メッセージの要素ごとの個別処理を可能にする**
+## このパターンは何をするのか
 
-## 2. 解決する課題 (Context & Problem)
-> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
+Splitterは、**1つのメッセージを複数のメッセージに分割する**パターンです。
 
-- **Before:**
-  - 複合メッセージ（例：複数の行項目を含む顧客注文）を処理する必要がある
-  - 各要素が異なる方法で処理される必要がある
-  - 例：注文内の商品タイプによって、異なる在庫システムで検証が必要
+### 身近な例で考える
 
-- **Trigger:**
-  - 複数要素を含むメッセージを処理する際、各要素を個別に扱いたい
-  - 各要素を並列処理したい
-  - 各要素を異なるシステムに送信したい
+宅配便の仕分けセンターを想像してください。
 
-## 3. ソリューションと構造 (Structure & Visual)
-> **目的:** Dual Coding（文字と図）により記憶定着を図る。
+大きな箱の中に、3つの荷物が入って届きました。仕分けセンターでは、箱を開けて3つの荷物を取り出し、それぞれ別の配送先に振り分けます。
 
-### 仕組み
-Splitterを使用して複合メッセージを個別メッセージの系列に分割する。
-- 元のメッセージから各要素ごとに個別のメッセージを発行
-- 各メッセージは適切な処理先にルーティング可能
+```mermaid
+graph TB
+    BOX["大きな箱<br/>(荷物A, B, C入り)"] --> CENTER[仕分けセンター<br/>で開封]
+    CENTER --> A[荷物A]
+    CENTER --> B[荷物B]
+    CENTER --> C[荷物C]
+    A --> TOKYO[東京へ]
+    B --> OSAKA[大阪へ]
+    C --> FUKUOKA[福岡へ]
+```
 
-### 構造図
+Splitterも同じです。複数の要素を含む1つのメッセージを受け取り、要素ごとに別々のメッセージに分割して、それぞれ適切な処理先に送ります。
+
+## なぜSplitterが必要なのか
+
+### 問題の背景
+
+実際のビジネスでは、1つのメッセージに複数の関連する要素が含まれていることがよくあります。
+
+例えば、ECサイトの注文を考えてみましょう。1つの注文に3つの商品が含まれているとします。
 
 ```mermaid
 graph LR
-    subgraph "Splitter Pattern"
-        ORDER[複合メッセージ<br/>Item A, B, C] --> SP{Splitter}
-        SP --> MSG_A[Message A]
-        SP --> MSG_B[Message B]
-        SP --> MSG_C[Message C]
-    end
+    ORDER["注文<br/>(ID: 12345)"] --> A["商品A: パソコン"]
+    ORDER --> B["商品B: キーボード"]
+    ORDER --> C["商品C: モニター"]
+    A --> WA[倉庫Aで在庫確認]
+    B --> WB[倉庫Bで在庫確認]
+    C --> WC[倉庫Cで在庫確認]
+```
 
-    MSG_A --> PROC_A[Processor A]
-    MSG_B --> PROC_B[Processor B]
-    MSG_C --> PROC_C[Processor C]
+問題は、**各商品を別々のシステムで処理する必要がある**ことです。
+
+- パソコン → 電化製品倉庫
+- キーボード → 周辺機器倉庫
+- モニター → 大型商品倉庫
+
+### Splitterがない場合の問題
+
+**問題1: 全ての商品を1つのシステムで処理できない**
+
+各倉庫システムは自分が担当する商品だけを処理できます。注文全体をそのまま送っても、処理できません。
+
+**問題2: 並列処理ができない**
+
+商品ごとに分割しないと、在庫確認を並列で実行できず、全体の処理時間が長くなります。
+
+**問題3: 各商品への適切なルーティングができない**
+
+[[content_based_router|Content-Based Router]]で商品タイプごとに振り分けるには、まず個別の商品メッセージに分割する必要があります。
+
+### Splitterを使うと
+
+Splitterを使うと、1つの注文を商品ごとのメッセージに分割できます。
+
+```mermaid
+graph LR
+    ORDER[注文<br/>商品A,B,C] --> SP{Splitter}
+    SP --> MSG_A[商品Aのメッセージ]
+    SP --> MSG_B[商品Bのメッセージ]
+    SP --> MSG_C[商品Cのメッセージ]
+
+    MSG_A --> WH_A[電化製品倉庫]
+    MSG_B --> WH_B[周辺機器倉庫]
+    MSG_C --> WH_C[大型商品倉庫]
 
     style SP fill:#ffcc80
 ```
 
-### 処理フロー
+## Splitterの仕組み
+
+### 基本的な動作
+
+Splitterは以下のステップで動作します。
+
+1. **複合メッセージを受け取る**（例：3商品を含む注文）
+2. **各要素ごとに個別のメッセージを作成する**
+3. **作成したメッセージを次の処理に送る**
+
+### 処理の流れ
 
 ```mermaid
 sequenceDiagram
     participant Sender as 送信者
     participant SP as Splitter
-    participant PA as Processor A
-    participant PB as Processor B
-    participant PC as Processor C
+    participant PA as 処理A
+    participant PB as 処理B
+    participant PC as 処理C
 
     Sender->>SP: Order(items=[A,B,C])
-    Note over SP: 各itemを個別メッセージに分割
-    SP->>PA: ItemOrdered(A)
-    SP->>PB: ItemOrdered(B)
-    SP->>PC: ItemOrdered(C)
+    Note over SP: 各アイテムを<br/>個別メッセージに分割
+    SP->>PA: Item(A)
+    SP->>PB: Item(B)
+    SP->>PC: Item(C)
 ```
 
-## 4. トレードオフと制約 (Critical Thinking)
+### Correlation IDの重要性
 
-### Pros (利点):
-- **並列処理**: 各要素を独立して並列処理可能
-- **柔軟なルーティング**: 各要素を異なるシステムに送信可能
-- **スケーラビリティ**: 要素ごとに処理をスケール可能
-- **責務分離**: 各プロセッサは特定の要素タイプのみ処理
+分割されたメッセージには、**元のメッセージとの関連付け情報（Correlation ID）**を付けることが重要です。
 
-### Cons (欠点・副作用):
-- **メッセージ増幅**: 1つのメッセージがN個に増加
-- **順序喪失**: 分割後の処理順序が保証されない
-- **集約の必要性**: 結果を統合する場合、Aggregatorが必要
-- **トランザクション境界**: 元のメッセージの原子性が失われる
+なぜなら、後で[[aggregator|Aggregator]]を使って結果を統合するときに、「どのメッセージが同じ注文に属するか」を判断する必要があるからです。
 
-### Anti-Pattern:
-- 分割後の結果集約を考慮しない
-- 元のメッセージとの相関識別子（Correlation ID）を付与しない
-- 単一要素のメッセージに対してSplitterを使用
+```mermaid
+graph TB
+    subgraph "分割前"
+        BEFORE["Order(orderId=12345, items=[A,B,C])"]
+    end
 
-## 5. 実装イメージ (Implementation)
+    BEFORE --> SP{Splitter}
+
+    subgraph "分割後"
+        ITEM_A["Item(correlationId=12345, itemId=A, sequence=1, total=3)"]
+        ITEM_B["Item(correlationId=12345, itemId=B, sequence=2, total=3)"]
+        ITEM_C["Item(correlationId=12345, itemId=C, sequence=3, total=3)"]
+    end
+
+    SP --> ITEM_A
+    SP --> ITEM_B
+    SP --> ITEM_C
+
+    style SP fill:#ffcc80
+```
+
+分割後のメッセージには以下の情報を含めると良いでしょう：
+
+| フィールド | 説明 | 例 |
+|-----------|------|---|
+| correlationId | 元のメッセージを識別するID | 12345 |
+| sequence | 何番目の要素か | 2 |
+| total | 全部でいくつに分割されたか | 3 |
+
+## Splitterのメリットとデメリット
+
+### メリット
+
+**並列処理が可能になる**
+
+分割されたメッセージは独立して処理できるので、並列処理によって全体の処理時間を短縮できます。
+
+**要素ごとに異なる処理を適用できる**
+
+[[content_based_router|Content-Based Router]]と組み合わせて、各要素を適切な処理先にルーティングできます。
+
+**各処理システムの責務が明確になる**
+
+各処理システムは自分が担当する要素タイプだけを処理すれば良くなります。
+
+### デメリット
+
+**メッセージ数が増える**
+
+1つのメッセージがN個のメッセージに増えるので、システム全体のメッセージ量が増加します。
+
+**処理順序が保証されない**
+
+分割後のメッセージは並列に処理される可能性があるため、元の順序が失われることがあります。順序が重要な場合は[[resequencer|Resequencer]]が必要です。
+
+**結果の統合が必要**
+
+分割した結果を最終的に1つにまとめる必要がある場合は、[[aggregator|Aggregator]]を使って統合する必要があります。
+
+**トランザクションの管理が複雑になる**
+
+元のメッセージは1つのトランザクションで処理できましたが、分割後は複数のトランザクションになる可能性があります。
+
+### やってはいけないこと
+
+**Correlation IDを付けない**
+
+後で結果を統合するときに、どのメッセージが関連しているか判断できなくなります。
+
+**単一要素のメッセージにSplitterを使う**
+
+要素が1つしかないメッセージを分割する意味はありません。
+
+**結果の統合を考慮しない**
+
+分割した後の処理フローを設計せずにSplitterを使うと、後で困ることになります。
+
+## 実装例
 
 ### Akka Typed Actor (Scala)
+
+以下は、注文を商品ごとに分割するSplitterの実装例です。
 
 ```scala
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.actor.typed.scaladsl.Behaviors
 
-// ドメインモデル
+// 元のメッセージ（複数の商品を含む注文）
 case class Order(orderId: String, items: Seq[OrderItem])
 case class OrderItem(itemId: String, itemType: String, quantity: Int)
 
 // 分割後のメッセージ（Correlation ID付き）
 case class SplitOrderItem(
-  correlationId: String,  // 元のorderIdを保持
-  sequenceNumber: Int,    // 分割されたメッセージの順序
-  totalItems: Int,        // 分割総数
+  correlationId: String,  // 元のorderIdを保持（後でAggregatorが使用）
+  sequenceNumber: Int,    // 何番目の要素か
+  totalItems: Int,        // 全部でいくつに分割されたか
   item: OrderItem
 )
 
-// Splitter
+// Splitterの実装
 object OrderSplitter {
   sealed trait Command
   case class Split(order: Order) extends Command
@@ -112,17 +222,19 @@ object OrderSplitter {
     Behaviors.receive { (context, command) =>
       command match {
         case Split(order) =>
-          context.log.info(s"Splitting order ${order.orderId} into ${order.items.size} items")
+          context.log.info(
+            s"注文 ${order.orderId} を ${order.items.size} 個のアイテムに分割"
+          )
 
-          // 各アイテムを個別メッセージとして発行
+          // 各アイテムを個別のメッセージとして発行
           order.items.zipWithIndex.foreach { case (item, index) =>
             val splitItem = SplitOrderItem(
-              correlationId = order.orderId,
+              correlationId = order.orderId,  // 元の注文IDを保持
               sequenceNumber = index + 1,
               totalItems = order.items.size,
               item = item
             )
-            context.log.info(s"Split item: ${item.itemId}")
+            context.log.info(s"分割: ${item.itemId} (${index + 1}/${order.items.size})")
             itemProcessor ! splitItem
           }
           Behaviors.same
@@ -130,15 +242,15 @@ object OrderSplitter {
     }
 }
 
-// Content-Based Router と組み合わせた Splitter
+// Content-Based Routerと組み合わせたSplitter
 object SplitterWithRouter {
   sealed trait Command
   case class Split(order: Order) extends Command
 
   def apply(
-    typeAProcessor: ActorRef[SplitOrderItem],
-    typeBProcessor: ActorRef[SplitOrderItem],
-    defaultProcessor: ActorRef[SplitOrderItem]
+    electronicProcessor: ActorRef[SplitOrderItem],  // 電化製品用
+    peripheralProcessor: ActorRef[SplitOrderItem],  // 周辺機器用
+    defaultProcessor: ActorRef[SplitOrderItem]      // その他
   ): Behavior[Command] =
     Behaviors.receive { (context, command) =>
       command match {
@@ -151,15 +263,15 @@ object SplitterWithRouter {
               item = item
             )
 
-            // 分割後に Content-Based Routing
+            // 分割後にContent-Based Routerでルーティング
             val destination = item.itemType match {
-              case "TypeA" => typeAProcessor
-              case "TypeB" => typeBProcessor
-              case _       => defaultProcessor
+              case "electronic"  => electronicProcessor
+              case "peripheral"  => peripheralProcessor
+              case _             => defaultProcessor
             }
 
             context.log.info(
-              s"Routing ${item.itemId} (${item.itemType}) to ${destination.path.name}"
+              s"${item.itemId} (${item.itemType}) を ${destination.path.name} へ"
             )
             destination ! splitItem
           }
@@ -167,59 +279,64 @@ object SplitterWithRouter {
       }
     }
 }
-
-// アイテムプロセッサ
-object ItemProcessor {
-  def apply(name: String): Behavior[SplitOrderItem] =
-    Behaviors.receive { (context, splitItem) =>
-      context.log.info(
-        s"$name processing: ${splitItem.item.itemId} " +
-        s"(${splitItem.sequenceNumber}/${splitItem.totalItems})"
-      )
-      Behaviors.same
-    }
-}
-
-// 使用例
-object SplitterExample {
-  def apply(): Behavior[Nothing] =
-    Behaviors.setup[Nothing] { context =>
-      val typeAProcessor = context.spawn(ItemProcessor("TypeA"), "typeAProcessor")
-      val typeBProcessor = context.spawn(ItemProcessor("TypeB"), "typeBProcessor")
-      val defaultProcessor = context.spawn(ItemProcessor("Default"), "defaultProcessor")
-
-      val splitter = context.spawn(
-        SplitterWithRouter(typeAProcessor, typeBProcessor, defaultProcessor),
-        "splitter"
-      )
-
-      splitter ! SplitterWithRouter.Split(Order(
-        "ORD-001",
-        Seq(
-          OrderItem("item1", "TypeA", 2),
-          OrderItem("item2", "TypeB", 1),
-          OrderItem("item3", "TypeA", 3)
-        )
-      ))
-
-      Behaviors.empty
-    }
-}
 ```
 
-## 6. リンクと関係性 (Network Knowledge)
+### コードのポイント
 
-### 関連パターン:
-- [[aggregator|Aggregator]] (補完: 分割された結果を再統合)
-- [[content_based_router|Content-Based Router]] (組み合わせ: 分割後のルーティング)
-- [[composed_message_processor|Composed Message Processor]] (組み合わせ: Splitter + Router + Aggregator)
-- [[resequencer|Resequencer]] (補完: 分割後の順序復元)
-- [[correlation_identifier|Correlation Identifier]] - 分割メッセージの関連付け
+**Correlation IDを付与**
 
-### 構成要素:
-- [[message_channel|Message Channel]] - 出力チャネル
-- [[message|Message]] - 分割後の個別メッセージ
+`correlationId = order.orderId` で、元の注文IDを保持しています。これにより、後でAggregatorが「どのメッセージが同じ注文に属するか」を判断できます。
 
-### 次のステップ:
-- [[aggregator|Aggregator]] - 分割後の結果を集約する場合
-- [[composed_message_processor|Composed Message Processor]] - 分割→処理→集約の完全なパターン
+**シーケンス情報を付与**
+
+`sequenceNumber` と `totalItems` で、分割後のメッセージの順序と総数を記録しています。これにより、Aggregatorが「全てのメッセージが揃ったか」を判断できます。
+
+**Content-Based Routerとの組み合わせ**
+
+`SplitterWithRouter` では、分割と同時にルーティングも行っています。これは[[composed_message_processor|Composed Message Processor]]パターンの一部です。
+
+## SplitterとAggregatorの関係
+
+SplitterとAggregatorは**逆の関係**にあります。
+
+```mermaid
+graph LR
+    subgraph "Splitter"
+        S_IN[1つのメッセージ] --> SP{Splitter}
+        SP --> S_OUT1[メッセージ1]
+        SP --> S_OUT2[メッセージ2]
+        SP --> S_OUT3[メッセージ3]
+    end
+```
+
+```mermaid
+graph LR
+    subgraph "Aggregator"
+        A_IN1[メッセージ1] --> AG{Aggregator}
+        A_IN2[メッセージ2] --> AG
+        A_IN3[メッセージ3] --> AG
+        AG --> A_OUT[1つのメッセージ]
+    end
+```
+
+多くの場合、Splitterで分割した後、各要素を処理し、最後にAggregatorで結果を統合するという流れになります。これが[[composed_message_processor|Composed Message Processor]]パターンです。
+
+## 関連するパターン
+
+| パターン | 関係 |
+|---------|------|
+| [[aggregator\|Aggregator]] | Splitterの逆の役割。分割されたメッセージを再び統合する |
+| [[content_based_router\|Content-Based Router]] | Splitterで分割した後、各メッセージをルーティングするのに使う |
+| [[composed_message_processor\|Composed Message Processor]] | Splitter + Router + Aggregatorを組み合わせた複合パターン |
+| [[resequencer\|Resequencer]] | 分割後に順序が乱れた場合に、元の順序に並べ直す |
+| [[correlation_identifier\|Correlation Identifier]] | 分割されたメッセージを関連付けるために使用 |
+
+## 次に読むべき内容
+
+- [[aggregator|Aggregator]] - 分割した結果を統合する場合
+- [[composed_message_processor|Composed Message Processor]] - 分割→処理→統合の完全なパターン
+- [[resequencer|Resequencer]] - 分割後の順序を復元する場合
+
+## 参考資料
+
+- [Enterprise Integration Patterns - Splitter](https://www.enterpriseintegrationpatterns.com/patterns/messaging/Sequencer.html)

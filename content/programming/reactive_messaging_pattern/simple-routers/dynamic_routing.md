@@ -2,26 +2,17 @@
 
 ## 概念図
 
-```
-              ┌─────────────────────────────────────────┐
-              │           Dynamic Router                │
-              │                                         │
-              │    ┌─────┐      ┌─────┐                │
-     ─────────┼───▶│     │      │     │────────────────┼───▶
-              │    │  R  │ .... │  R  │                │
-              │    │  U  │      │  U  │                │
-              │    │  L  │      │  L  │                │
-              │    │  E  │      │  E  │                │
-              │    └─────┘      └─────┘                │
-              │         ▲                              │
-              │         │                              │
-              │    ┌────┴────┐                         │
-              │    │ Control │                         │
-              │    │ Channel │                         │
-              └────┴─────────┴─────────────────────────┘
-                        ▲
-                        │
-                   登録/解除
+```mermaid
+graph LR
+    subgraph "Dynamic Router"
+        IN[入力] --> RULES{ルール<br/>ベース}
+        RULES --> OUT[出力]
+        CTRL[Control<br/>Channel] -.->|ルール更新| RULES
+    end
+    REG[登録/解除] -.-> CTRL
+
+    style RULES fill:#ffcc80
+    style CTRL fill:#e1f5fe
 ```
 
 ---
@@ -58,38 +49,22 @@ Dynamic Routerからメッセージを受信するには、アクターが特定
 
 ## システム構成図（Figure 7.3）
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                                                                         │
-│  ┌─────────┐                                                            │
-│  │  TypeC  │     Input          TypedMessage              Output        │
-│  │ Message │    Channel        InterestRouter            Channel        │
-│  │  ┌───┐  │                   ┌───────────┐                            │
-│  │  │ 📄│  │─────────────────▶│  ┌─┬─┬─┐  │─────────────────▶  (A)     │
-│  │  └───┘  │                   │  │ │:│ │  │                            │
-│  └─────────┘                   │  ├─┼─┼─┤  │        Output              │
-│                                │  │ │ │ │  │       Channel              │
-│                                │  └─┴─┴─┘  │─────────────────▶  (B)     │
-│                                └─────┬─────┘                            │
-│                                      │              Output              │
-│                                      │             Channel              │
-│                                      │      ─────────────────▶  (C)     │
-│                                      │                                  │
-│                           ┌──────────┴──────────┐                       │
-│                           │                     │                       │
-│                           ▼                     │                       │
-│                    ┌─────────────┐              │                       │
-│                    │   Dynamic   │              │                       │
-│                    │  Rule Base  │◀─────────────┘                       │
-│                    │   ┌─────┐   │         Control                      │
-│                    │   │ DB  │   │         Channel                      │
-│                    │   └─────┘   │                                      │
-│                    └─────────────┘                                      │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
+```mermaid
+graph TB
+    subgraph "Dynamic Router システム"
+        MSG[TypeCMessage] --> ROUTER{TypedMessage<br/>InterestRouter}
+        ROUTER -->|Output A| A["受信者A"]
+        ROUTER -->|Output B| B["受信者B"]
+        ROUTER -->|Output C| C["受信者C"]
+        ROUTER <-.->|参照/更新| DB[(Dynamic<br/>Rule Base)]
+        CTRL[Control Channel] -.->|登録/解除| DB
+    end
 
-※ Dynamic Routerは関心を登録したアクターにのみメッセージをルーティングする
+    style ROUTER fill:#ffcc80
+    style DB fill:#e1f5fe
 ```
+
+> **注**: Dynamic Routerは関心を登録したアクターにのみメッセージをルーティングする
 
 ---
 
@@ -468,85 +443,49 @@ class TypedMessageInterestRouter(
 
 ### 登録フロー
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                       登録プロセス                              │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  InterestedIn メッセージ受信                                    │
-│           │                                                     │
-│           ▼                                                     │
-│  ┌─────────────────────────┐                                    │
-│  │ interestRegistry に     │                                    │
-│  │ messageType が存在？     │                                    │
-│  └───────────┬─────────────┘                                    │
-│         ┌────┴────┐                                             │
-│         │         │                                             │
-│        No        Yes                                            │
-│         │         │                                             │
-│         ▼         ▼                                             │
-│   プライマリ   セカンダリ                                         │
-│   として登録   として登録                                         │
-│   (interest   (secondary                                        │
-│    Registry)   InterestRegistry)                                │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph "登録プロセス"
+        START[InterestedIn<br/>メッセージ受信] --> CHECK{interestRegistry に<br/>messageType が存在？}
+        CHECK -->|No| PRIMARY[プライマリとして登録<br/>interestRegistry]
+        CHECK -->|Yes| SECONDARY[セカンダリとして登録<br/>secondaryInterestRegistry]
+    end
+
+    style CHECK fill:#ffcc80
+    style PRIMARY fill:#a5d6a7
+    style SECONDARY fill:#e1f5fe
 ```
 
 ### メッセージルーティングフロー
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    メッセージルーティング                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  任意のメッセージ受信                                            │
-│           │                                                     │
-│           ▼                                                     │
-│  ┌─────────────────────────┐                                    │
-│  │ interestRegistry に     │                                    │
-│  │ messageType が存在？     │                                    │
-│  └───────────┬─────────────┘                                    │
-│         ┌────┴────┐                                             │
-│         │         │                                             │
-│        Yes        No                                            │
-│         │         │                                             │
-│         ▼         ▼                                             │
-│   登録済み     dunnoInterested                                   │
-│   アクターへ   (デッドレター)へ                                    │
-│   forward     送信                                               │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph "メッセージルーティング"
+        START[任意のメッセージ受信] --> CHECK{interestRegistry に<br/>messageType が存在？}
+        CHECK -->|Yes| FORWARD[登録済みアクターへ<br/>forward]
+        CHECK -->|No| DEAD[dunnoInterested<br/>デッドレターへ送信]
+    end
+
+    style CHECK fill:#ffcc80
+    style FORWARD fill:#a5d6a7
+    style DEAD fill:#ffcdd2
 ```
 
 ### 解除フロー（セカンダリ昇格）
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                セカンダリ→プライマリ昇格                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  NoLongerInterestedIn メッセージ受信                            │
-│           │                                                     │
-│           ▼                                                     │
-│  ┌─────────────────────────┐                                    │
-│  │ 送信者がプライマリ？      │                                    │
-│  └───────────┬─────────────┘                                    │
-│              │ Yes                                              │
-│              ▼                                                  │
-│  ┌─────────────────────────┐                                    │
-│  │ セカンダリが存在？        │                                    │
-│  └───────────┬─────────────┘                                    │
-│         ┌────┴────┐                                             │
-│         │         │                                             │
-│        Yes        No                                            │
-│         │         │                                             │
-│         ▼         ▼                                             │
-│   セカンダリを   登録を                                          │
-│   プライマリに   削除                                            │
-│   昇格                                                          │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph "セカンダリ→プライマリ昇格"
+        START[NoLongerInterestedIn<br/>メッセージ受信] --> CHECK1{送信者がプライマリ？}
+        CHECK1 -->|Yes| CHECK2{セカンダリが存在？}
+        CHECK2 -->|Yes| PROMOTE[セカンダリを<br/>プライマリに昇格]
+        CHECK2 -->|No| REMOVE[登録を削除]
+    end
+
+    style CHECK1 fill:#ffcc80
+    style CHECK2 fill:#ffcc80
+    style PROMOTE fill:#a5d6a7
+    style REMOVE fill:#ffcdd2
 ```
 
 ---

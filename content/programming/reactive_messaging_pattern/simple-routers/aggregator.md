@@ -1,138 +1,241 @@
 # Aggregator
 
-## 1. 3行要約 (Feynman Technique)
-> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
-- 「パズルを組み立てる人」のような役割。バラバラに届くピースを集めて、1つの完成した絵にする
-- 関連する複数のメッセージを収集し、完全なセットが揃ったら1つの統合メッセージを発行
-- 核心的価値：**分散した結果の統合と完了判定**
+## このパターンは何をするのか
 
-## 2. 解決する課題 (Context & Problem)
-> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
+Aggregatorは、**バラバラに届く複数のメッセージを集めて、1つのメッセージにまとめる**パターンです。
 
-- **Before:**
-  - 複数の見積エンジンに価格見積を依頼したが、応答がバラバラに届く
-  - 各応答をどの依頼に紐づけるか、全ての応答が揃ったかの判定が必要
-  - 例：最良価格を選択するには、全ての見積を比較する必要がある
+### 身近な例で考える
 
-- **Trigger:**
-  - 個別だが関連する複数のメッセージの結果を1つに結合したい
-  - 全ての関連メッセージが揃ったことを検知したい
-  - Splitter/Recipient Listで分散した処理の結果を統合したい
-
-## 3. ソリューションと構造 (Structure & Visual)
-> **目的:** Dual Coding（文字と図）により記憶定着を図る。
-
-### 仕組み
-ステートフルなフィルターであるAggregatorを使用して、関連する個別メッセージを収集・保存し、完全なセットが揃ったら単一の集約メッセージを発行する。
-
-### 設計の3要素
-
-| 要素 | 説明 |
-|-----|------|
-| **相関性 (Correlation)** | どのメッセージが関連しているか（Correlation Identifier） |
-| **完全性条件 (Completeness)** | いつ結果を発行するか（終了条件） |
-| **集約アルゴリズム** | メッセージをどう結合するか |
-
-### 構造図
-
-```mermaid
-graph LR
-    subgraph "Aggregator Pattern"
-        M1[Message 1<br/>rfqId=123] --> AG{Aggregator}
-        M2[Message 2<br/>rfqId=123] --> AG
-        M3[Message 3<br/>rfqId=123] --> AG
-        AG --> OUT[Aggregated<br/>Message]
-    end
-
-    STATE[(State<br/>Store)]
-    AG <-.-> STATE
-
-    style AG fill:#ffcc80
-```
-
-### 処理フロー
+旅行の計画を立てるとき、複数の旅行代理店に見積もりを依頼することがあります。
 
 ```mermaid
 sequenceDiagram
-    participant R1 as Recipient 1
-    participant R2 as Recipient 2
-    participant R3 as Recipient 3
-    participant AG as Aggregator
-    participant OUT as Output
+    participant YOU as あなた
+    participant A as A社
+    participant B as B社
+    participant C as C社
 
-    Note over AG: 期待数: 3
-    R1->>AG: PriceQuote(rfqId=123)
-    Note over AG: 受信: 1/3
-    R3->>AG: PriceQuote(rfqId=123)
-    Note over AG: 受信: 2/3
-    R2->>AG: PriceQuote(rfqId=123)
-    Note over AG: 受信: 3/3 ✓ 完了
-    AG->>OUT: QuotationFulfillment(rfqId=123, quotes=[...])
+    YOU->>A: 見積依頼
+    YOU->>B: 見積依頼
+    YOU->>C: 見積依頼
+    Note over YOU: 数日後...
+    B-->>YOU: 回答
+    A-->>YOU: 回答
+    C-->>YOU: 回答
+    Note over YOU: 3社揃った！<br/>比較しよう
 ```
 
-## 4. トレードオフと制約 (Critical Thinking)
+このとき、あなたは「3社全部から回答が届いたら比較しよう」と考えます。これがAggregatorの役割です。
 
-### Pros (利点):
-- **結果統合**: 分散処理の結果を1つにまとめる
-- **完了検知**: 全ての応答が揃ったことを検知
-- **柔軟な終了条件**: 様々な完了条件に対応可能
-- **状態管理**: 未完了の集約を追跡
+ソフトウェアの世界でも同じことが起きます。例えば、複数の価格見積システムに問い合わせて、全ての回答が揃ったら最安値を選ぶ、といった処理が必要になります。Aggregatorは、この「バラバラに届く回答を集めて、1つにまとめる」処理を担当します。
 
-### Cons (欠点・副作用):
-- **ステートフル**: 状態を保持するためメモリ使用量が増加
-- **タイムアウト管理**: 応答が来ない場合の処理が必要
-- **スケーラビリティ**: 状態の分散管理が複雑
-- **障害復旧**: 状態の永続化・復旧が必要
+## なぜAggregatorが必要なのか
 
-### 完全性条件（Termination Criteria）
+### 問題の背景
 
-| 条件 | 説明 |
-|-----|------|
-| **Wait for All** | 期待する全ての応答を待つ |
-| **Timeout** | 指定時間経過後に終了 |
-| **First Best** | 最初の最適な応答で終了 |
-| **Timeout with Override** | タイムアウトだが、より良い応答があれば上書き |
-| **External Event** | 外部イベントにより終了 |
+メッセージングシステムでは、1つのリクエストを複数のシステムに分散して処理することがよくあります。
 
-### Anti-Pattern:
-- タイムアウトを設定しない（永久に待機する可能性）
-- 状態の永続化を考慮しない（障害時にデータ損失）
-- Correlation IDを使用しない（メッセージの関連付けができない）
+例えば、[[splitter|Splitter]]パターンを使って注文を商品ごとに分割し、それぞれ別の在庫システムで確認する場合：
 
-## 5. 実装イメージ (Implementation)
+```mermaid
+graph LR
+    ORDER["元の注文<br/>(商品A, B, C)"] --> SP{Splitter}
+    SP --> REQ_A[商品Aの<br/>確認リクエスト]
+    SP --> REQ_B[商品Bの<br/>確認リクエスト]
+    SP --> REQ_C[商品Cの<br/>確認リクエスト]
+    REQ_A --> SYS1[在庫システム1]
+    REQ_B --> SYS2[在庫システム2]
+    REQ_C --> SYS3[在庫システム3]
+    SYS1 --> RES_A[商品Aの結果]
+    SYS2 --> RES_B[商品Bの結果]
+    SYS3 --> RES_C[商品Cの結果]
+
+    style SP fill:#ffcc80
+```
+
+問題は、**これらの結果がバラバラに、しかも順不同で届く**ことです。
+
+- 商品Cの結果が最初に届くかもしれない
+- 商品Bの結果がなかなか届かないかもしれない
+- どの結果がどの注文に関係するか、紐づける必要がある
+
+これらの結果を集めて「注文全体の確認結果」として1つにまとめないと、次の処理に進めません。
+
+### Aggregatorがない場合の問題
+
+Aggregatorを使わずに自前で実装しようとすると、以下のような問題に直面します。
+
+**問題1: どのメッセージが関連しているか判断が難しい**
+
+「商品Aの結果」と「商品Bの結果」が同じ注文に関係することを、どうやって判断するのでしょうか？
+
+**問題2: 全ての結果が揃ったかどうかの判断が難しい**
+
+3つの結果を待っているとき、「3つ全部届いた」ことをどうやって判断するのでしょうか？もし1つのシステムが応答しなかったら、永遠に待ち続けるのでしょうか？
+
+**問題3: 状態の管理が複雑**
+
+「今、どの結果が届いていて、どの結果を待っているか」という状態を管理する必要があります。
+
+## Aggregatorの仕組み
+
+Aggregatorは、これらの問題を解決するために3つの要素を組み合わせて動作します。
+
+### 設計の3要素
+
+| 要素 | 説明 | 例 |
+|-----|------|-----|
+| **相関性（Correlation）** | どのメッセージが同じグループに属するかを判断する方法 | 注文ID（rfqId）が同じメッセージは同じグループ |
+| **終了条件** | いつ「集まった」と判断して結果を出すか | 3件全部届いたら出す、または5秒経ったら届いた分だけで出す |
+| **集約アルゴリズム** | 集まったメッセージをどうやって1つにまとめるか | 全ての見積もりから最安値を選ぶ |
+
+### 処理の流れ
+
+```mermaid
+sequenceDiagram
+    participant R1 as 在庫システム1
+    participant R2 as 在庫システム2
+    participant R3 as 在庫システム3
+    participant AG as Aggregator
+    participant OUT as 次の処理
+
+    Note over AG: 注文ID=123について<br/>3件の結果を待機中
+    R1->>AG: 商品Aの結果（注文ID=123）
+    Note over AG: 1件目を受信<br/>あと2件待ち
+    R3->>AG: 商品Cの結果（注文ID=123）
+    Note over AG: 2件目を受信<br/>あと1件待ち
+    R2->>AG: 商品Bの結果（注文ID=123）
+    Note over AG: 3件全部揃った！
+    AG->>OUT: 統合された注文確認結果
+```
+
+### 相関性（Correlation）について
+
+「どのメッセージが関連しているか」を判断するために、**Correlation Identifier（相関ID）**を使います。
+
+上の図では、全てのメッセージに「注文ID=123」という情報が含まれています。Aggregatorはこの注文IDを見て、「このメッセージは注文123に関係するものだ」と判断します。
+
+この相関IDがないと、Aggregatorはどのメッセージを一緒にまとめれば良いか判断できません。
+
+## 終了条件（いつ結果を出すか）
+
+Aggregatorの最も難しい設計判断の1つが「いつ結果を出すか」です。
+
+### なぜ終了条件が必要なのか
+
+先ほどの旅行見積もりの例で考えてみましょう。3社に見積もりを依頼したとき：
+
+- **理想的な場合**: 3社全員から回答が届いたら比較できる
+- **問題のある場合**: C社が倒産していて回答が永遠に届かない → 永遠に待つことになる
+
+このため、「いつ待つのをやめて、今ある結果で処理を進めるか」を決める必要があります。これが終了条件です。
+
+### 終了条件のパターン
+
+| 条件 | 説明 | 使う場面 |
+|-----|------|---------|
+| **Wait for All** | 全部届くまで待つ（3件待ちなら3件届いたら出す） | 全ての結果が必須な場合。ただし、タイムアウトも設定しておくのが安全 |
+| **Timeout** | 時間が来たら届いた分だけで出す（5秒待ってダメなら諦める） | 全ての結果が揃わなくても処理を進められる場合 |
+| **First Best** | 「これでOK」と思えるものが来たらすぐ出す | 最初に条件を満たす結果が来れば十分な場合（例：最初に在庫ありと返ってきた店舗を選ぶ） |
+| **Timeout with Override** | 時間が来たら出すが、後からもっと良いのが来たら差し替える | 速度と品質のバランスを取りたい場合 |
+| **External Event** | 外から「もう終わり」と言われたら出す | ビジネス上の区切り（例：取引日の終了）で集約を締め切る場合 |
+
+### 実装上の注意
+
+終了条件を設計するときは、以下の点に注意が必要です。
+
+**タイムアウトは必ず設定する**
+
+「全部届くまで待つ」だけでは、1つのシステムが応答しない場合に永遠に待ち続けてしまいます。必ずタイムアウトを設定して、「これ以上待っても意味がない」と判断できるようにしましょう。
+
+**「メッセージが来ない」ことの検知は難しい**
+
+メッセージングシステムでは、「メッセージが来ない」ことを検知するのは非常に難しいです。メッセージが遅れているのか、失われたのか、そもそも送信されなかったのか、判断できないからです。このため、タイムアウトによる終了が重要になります。
+
+## Aggregatorの特徴と注意点
+
+### Aggregatorは状態を持つ
+
+他の多くのルーターパターン（Content-Based RouterやMessage Filterなど）は、メッセージを受け取ってすぐに次に渡す「ステートレス」な動作をします。
+
+一方、Aggregatorは「今、どの結果が届いていて、どの結果を待っているか」という状態を保持する必要があります。これを**ステートフル**と呼びます。
+
+```mermaid
+graph LR
+    subgraph "Aggregatorの内部状態"
+        AG{Aggregator}
+        STATE[(状態ストア<br/>・注文123: 2件受信済み<br/>・注文456: 1件受信済み)]
+        AG <-.-> STATE
+    end
+```
+
+### 状態を持つことの影響
+
+**メモリ使用量が増える**
+
+待機中のメッセージを保存しておく必要があるため、メモリを消費します。
+
+**障害時の復旧が複雑**
+
+Aggregatorがクラッシュした場合、「どのメッセージまで処理していたか」という状態を復元する必要があります。状態を永続化（データベースに保存するなど）しておかないと、データが失われます。
+
+**スケールアウトが難しい**
+
+複数のAggregatorインスタンスを動かす場合、同じ注文に関するメッセージが同じインスタンスに届くようにする必要があります。そうしないと、状態がバラバラになってしまいます。
+
+### やってはいけないこと
+
+**タイムアウトを設定しない**
+
+応答が来ないシステムがあると、永遠に待ち続けてしまいます。
+
+**状態の永続化を考慮しない**
+
+システム障害時に、処理中だったデータが全て失われます。
+
+**Correlation IDを使わない**
+
+どのメッセージが関連しているか判断できず、正しく集約できません。
+
+## 実装例
 
 ### Akka Typed Actor (Scala)
+
+以下は、価格見積もりを集約するAggregatorの実装例です。
 
 ```scala
 import akka.actor.typed.{ActorRef, Behavior}
 import akka.actor.typed.scaladsl.{Behaviors, TimerScheduler}
 import scala.concurrent.duration._
 
-// ドメインモデル
+// 価格見積もりを表すデータ
 case class PriceQuote(
-  quoterId: String,
-  rfqId: String,
-  itemId: String,
-  retailPrice: Double,
-  discountPrice: Double
+  quoterId: String,      // 見積もりを出した業者のID
+  rfqId: String,         // 見積依頼ID（これがCorrelation ID）
+  itemId: String,        // 商品ID
+  retailPrice: Double,   // 定価
+  discountPrice: Double  // 割引価格
 )
 
+// 集約された結果を表すデータ
 case class QuotationFulfillment(
   rfqId: String,
   priceQuotes: Seq[PriceQuote]
 )
 
-// Aggregator
+// Aggregatorの実装
 object PriceQuoteAggregator {
+  // Aggregatorが受け取るメッセージの種類
   sealed trait Command
   case class AddQuote(quote: PriceQuote) extends Command
   case class ExpectQuotes(rfqId: String, expectedCount: Int, replyTo: ActorRef[QuotationFulfillment]) extends Command
   private case class Timeout(rfqId: String) extends Command
 
+  // 1つの集約の状態を表すデータ
   case class AggregationState(
-    expectedCount: Int,
-    quotes: Vector[PriceQuote],
-    replyTo: ActorRef[QuotationFulfillment]
+    expectedCount: Int,                    // 期待する見積もりの数
+    quotes: Vector[PriceQuote],            // 受信済みの見積もり
+    replyTo: ActorRef[QuotationFulfillment] // 結果の送信先
   )
 
   def apply(): Behavior[Command] =
@@ -141,36 +244,36 @@ object PriceQuoteAggregator {
     }
 
   private def aggregator(
-    aggregations: Map[String, AggregationState],
+    aggregations: Map[String, AggregationState],  // rfqId -> 状態
     timers: TimerScheduler[Command]
   ): Behavior[Command] =
     Behaviors.receive { (context, command) =>
       command match {
-        // 新しい集約を開始
+        // 新しい集約を開始する
         case ExpectQuotes(rfqId, expectedCount, replyTo) =>
-          context.log.info(s"Expecting $expectedCount quotes for $rfqId")
+          context.log.info(s"$rfqId について $expectedCount 件の見積もりを待機開始")
 
-          // タイムアウトを設定
+          // タイムアウトを設定（5秒後に強制終了）
           timers.startSingleTimer(rfqId, Timeout(rfqId), 5.seconds)
 
           val state = AggregationState(expectedCount, Vector.empty, replyTo)
           aggregator(aggregations + (rfqId -> state), timers)
 
-        // 見積を追加
+        // 見積もりを追加する
         case AddQuote(quote) =>
           aggregations.get(quote.rfqId) match {
             case Some(state) =>
               val newQuotes = state.quotes :+ quote
               context.log.info(
-                s"Added quote for ${quote.rfqId}: ${newQuotes.size}/${state.expectedCount}"
+                s"${quote.rfqId} の見積もりを受信: ${newQuotes.size}/${state.expectedCount}"
               )
 
-              // 全て揃ったら発行
+              // 全て揃ったら結果を出力
               if (newQuotes.size >= state.expectedCount) {
-                timers.cancel(quote.rfqId)
+                timers.cancel(quote.rfqId)  // タイムアウトをキャンセル
                 val fulfillment = QuotationFulfillment(quote.rfqId, newQuotes)
                 state.replyTo ! fulfillment
-                context.log.info(s"Aggregation complete for ${quote.rfqId}")
+                context.log.info(s"${quote.rfqId} の集約完了")
                 aggregator(aggregations - quote.rfqId, timers)
               } else {
                 val newState = state.copy(quotes = newQuotes)
@@ -178,7 +281,7 @@ object PriceQuoteAggregator {
               }
 
             case None =>
-              context.log.warn(s"No aggregation found for ${quote.rfqId}")
+              context.log.warn(s"${quote.rfqId} に対応する集約が見つかりません")
               Behaviors.same
           }
 
@@ -187,9 +290,9 @@ object PriceQuoteAggregator {
           aggregations.get(rfqId) match {
             case Some(state) =>
               context.log.warn(
-                s"Timeout for $rfqId with ${state.quotes.size}/${state.expectedCount} quotes"
+                s"$rfqId がタイムアウト: ${state.quotes.size}/${state.expectedCount} 件で終了"
               )
-              // 受信済みの見積で発行
+              // 受信済みの見積もりだけで結果を出力
               val fulfillment = QuotationFulfillment(rfqId, state.quotes)
               state.replyTo ! fulfillment
               aggregator(aggregations - rfqId, timers)
@@ -200,67 +303,33 @@ object PriceQuoteAggregator {
       }
     }
 }
-
-// 最良価格を選択する拡張版Aggregator
-object BestPriceAggregator {
-  case class BestPriceQuotation(
-    rfqId: String,
-    bestQuotes: Map[String, PriceQuote]  // itemId -> 最安値
-  )
-
-  def selectBestPrices(quotes: Seq[PriceQuote]): Map[String, PriceQuote] = {
-    quotes.groupBy(_.itemId).map { case (itemId, itemQuotes) =>
-      itemId -> itemQuotes.minBy(_.discountPrice)
-    }
-  }
-}
-
-// 使用例
-object AggregatorExample {
-  def apply(): Behavior[Nothing] =
-    Behaviors.setup[Nothing] { context =>
-      val resultCollector = context.spawn(
-        Behaviors.receiveMessage[QuotationFulfillment] { fulfillment =>
-          println(s"Received ${fulfillment.priceQuotes.size} quotes for ${fulfillment.rfqId}")
-          Behaviors.same
-        },
-        "resultCollector"
-      )
-
-      val aggregator = context.spawn(PriceQuoteAggregator(), "aggregator")
-
-      // 3つの見積を期待
-      aggregator ! PriceQuoteAggregator.ExpectQuotes("RFQ-001", 3, resultCollector)
-
-      // 見積を追加
-      aggregator ! PriceQuoteAggregator.AddQuote(
-        PriceQuote("SupplierA", "RFQ-001", "item1", 100.0, 90.0)
-      )
-      aggregator ! PriceQuoteAggregator.AddQuote(
-        PriceQuote("SupplierB", "RFQ-001", "item1", 100.0, 85.0)
-      )
-      aggregator ! PriceQuoteAggregator.AddQuote(
-        PriceQuote("SupplierC", "RFQ-001", "item1", 100.0, 88.0)
-      )
-
-      Behaviors.empty
-    }
-}
 ```
 
-## 6. リンクと関係性 (Network Knowledge)
+### コードのポイント
 
-### 関連パターン:
-- [[splitter|Splitter]] (補完: 分割されたメッセージを集約)
-- [[recipient_list|Recipient List]] (補完: 複数宛先への応答を集約)
-- [[scatter_gather|Scatter-Gather]] (組み合わせ: Recipient List/Pub-Sub + Aggregator)
-- [[composed_message_processor|Composed Message Processor]] (組み合わせ: Splitter + Router + Aggregator)
-- [[correlation_identifier|Correlation Identifier]] - メッセージの関連付け
+**Correlation IDとして `rfqId` を使用**
 
-### 構成要素:
-- [[message_channel|Message Channel]] - 入出力チャネル
-- [[message_store|Message Store]] - 状態の永続化
+全ての見積もりに `rfqId`（見積依頼ID）が含まれています。Aggregatorはこの値を見て、どの見積もりが同じリクエストに関係するか判断します。
 
-### 次のステップ:
-- [[scatter_gather|Scatter-Gather]] - 問い合わせ→応答集約の完全なパターン
-- [[resequencer|Resequencer]] - 順序復元が必要な場合
+**終了条件は「全部揃う」または「タイムアウト」**
+
+`expectedCount` 件の見積もりが揃うか、5秒経過するかのいずれかで集約を終了します。
+
+**状態を `Map` で管理**
+
+`aggregations: Map[String, AggregationState]` で、rfqIdごとの集約状態を管理しています。
+
+## 関連するパターン
+
+| パターン | 関係 |
+|---------|------|
+| [[splitter\|Splitter]] | Aggregatorの逆の役割。Splitterで分割したメッセージを、Aggregatorで再び統合する |
+| [[recipient_list\|Recipient List]] | 複数の宛先に送ったメッセージの応答を、Aggregatorで集約する |
+| [[scatter_gather\|Scatter-Gather]] | Recipient List（またはPublish-Subscribe）とAggregatorを組み合わせた複合パターン |
+| [[composed_message_processor\|Composed Message Processor]] | Splitter + Router + Aggregatorを組み合わせた複合パターン |
+| [[correlation_identifier\|Correlation Identifier]] | Aggregatorがメッセージを関連付けるために使用する仕組み |
+| [[resequencer\|Resequencer]] | メッセージを順番に並べ直すパターン。Aggregatorと同様にステートフル |
+
+## 参考資料
+
+- [Enterprise Integration Patterns - Aggregator](https://www.enterpriseintegrationpatterns.com/patterns/messaging/Aggregator.html)
