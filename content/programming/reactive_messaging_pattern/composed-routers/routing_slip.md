@@ -1,494 +1,289 @@
-# Routing Slip パターン
+# Routing Slip
 
-## 概要
+## 1. 3行要約 (Feynman Technique)
+> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
+- 「回覧板」のような役割。次の回覧先リストを添付し、各部署を順番に回っていく
+- メッセージに処理ステップのリストを添付し、各ステップが次のステップへ転送
+- 核心的価値：**動的に決定される処理ステップの順次実行**
 
-大規模なビジネス手続きが**論理的には1つのこと**を行うが、**物理的には一連の処理ステップ**を必要とする場合に使用する。これはSOA（Service Oriented Architecture）で一般的に認識されるサービス合成を実現する。各ステップは個々のアクターによって処理される。
+## 2. 解決する課題 (Context & Problem)
+> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
 
+- **Before:**
+  - メッセージの処理ステップが設計時に不明、またはメッセージごとに異なる
+  - 例：注文の検証ステップが注文金額や顧客属性によって変わる
+  - 固定的なルーティングでは柔軟性に欠ける
+
+- **Trigger:**
+  - 実行時に処理ステップの順序を決定したい
+  - メッセージごとに異なるルーティングパスを実現したい
+  - 処理ステップの追加・削除を柔軟に行いたい
+
+## 3. ソリューションと構造 (Structure & Visual)
+> **目的:** Dual Coding（文字と図）により記憶定着を図る。
+
+### 仕組み
+各メッセージに処理ステップのリスト（Routing Slip）を添付する。各処理コンポーネントは：
+1. 自身の処理を実行
+2. Routing Slipから次のステップを読み取り
+3. メッセージを次のステップに転送
+
+### 構造図
+
+```mermaid
+graph LR
+    subgraph "Routing Slip Pattern"
+        IN[メッセージ] --> RS{Routing Slip<br/>生成}
+        RS --> S1[Step 1]
+        S1 --> S2[Step 2]
+        S2 --> S3[Step 3]
+        S3 --> OUT[完了]
+    end
+
+    SLIP[(Routing Slip<br/>Step1→Step2→Step3)]
+    RS -.-> SLIP
+    SLIP -.-> S1
+    SLIP -.-> S2
+    SLIP -.-> S3
+
+    style RS fill:#ffcc80
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Routing Slip パターン                        │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│    ┌──────┐    ┌──────┐    ┌──────┐    ┌──────┐               │
-│    │ Step │───>│ Step │───>│ Step │───>│ Step │               │
-│    │  1   │    │  2   │    │  3   │    │  4   │               │
-│    └──────┘    └──────┘    └──────┘    └──────┘               │
-│        │           │           │           │                   │
-│        v           v           v           v                   │
-│    [Actor]     [Actor]     [Actor]     [Actor]                │
-│                                                                 │
-│    メッセージが各ステップを順番に通過していく                     │
-└─────────────────────────────────────────────────────────────────┘
+
+### 処理フロー
+
+```mermaid
+sequenceDiagram
+    participant IN as 入力
+    participant GEN as Slip Generator
+    participant S1 as Step 1<br/>(顧客作成)
+    participant S2 as Step 2<br/>(連絡先登録)
+    participant S3 as Step 3<br/>(与信チェック)
+    participant OUT as 完了
+
+    IN->>GEN: RegisterCustomer
+    Note over GEN: Routing Slip生成<br/>[S1, S2, S3]
+    GEN->>S1: Message + Slip[S1,S2,S3]
+    Note over S1: 処理実行<br/>Slipから次を読取
+    S1->>S2: Message + Slip[S2,S3]
+    Note over S2: 処理実行<br/>Slipから次を読取
+    S2->>S3: Message + Slip[S3]
+    Note over S3: 処理実行<br/>Slipが空→完了
+    S3->>OUT: 処理完了
 ```
 
-## 例：顧客登録プロセス（Enterprise Integration Patterns [EIP]）
+## 4. トレードオフと制約 (Critical Thinking)
 
-| ステップ | 処理内容 |
-|---------|---------|
-| 1 | 新規顧客を作成 |
-| 2 | 顧客の連絡先情報を記録 |
-| 3 | 顧客のサービスプランをリクエスト |
-| 4 | 新規顧客の与信チェックを実行 |
+### Pros (利点):
+- **動的ルーティング**: 実行時にルートを決定可能
+- **分散制御**: 中央のルーターが不要
+- **柔軟性**: ステップの追加・削除・順序変更が容易
+- **シンプル**: 各コンポーネントは次のステップを知るだけで良い
 
----
+### Cons (欠点・副作用):
+- **線形処理のみ**: 条件分岐やループには対応困難
+- **エラー回復**: 途中のステップで失敗した場合の回復が複雑
+- **可視性**: 処理フロー全体の把握が難しい
+- **結合度**: メッセージにルーティング情報を持たせる必要がある
 
-## データ構造
+### Process Manager との比較
 
-### Value Objects [IDDD]
+| 観点 | Routing Slip | Process Manager |
+|-----|-------------|-----------------|
+| 処理ステップ | 固定、線形 | 動的、非線形可能 |
+| 条件分岐 | 不可 | 可能 |
+| ループ | 不可 | 可能 |
+| 並列処理 | 不可 | 可能 |
+| 制御 | 分散 | 集中 |
+| 複雑性 | 低い | 高い |
 
-すべてはイミュータブルな `RegistrationData` Value Object に合成される。
+### Anti-Pattern:
+- 条件分岐が必要な処理にRouting Slipを使用（Process Managerを使うべき）
+- Routing Slipの生成ロジックが複雑すぎる
+- エラー処理を考慮しない
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        RegistrationData                             │
-├─────────────────────────────────────────────────────────────────────┤
-│  ┌─────────────────────┐  ┌─────────────────────────────────────┐  │
-│  │ CustomerInformation │  │       ContactInformation            │  │
-│  ├─────────────────────┤  ├─────────────────────────────────────┤  │
-│  │ - name: String      │  │  ┌──────────────┐  ┌───────────┐   │  │
-│  │ - federalTaxId:     │  │  │PostalAddress │  │ Telephone │   │  │
-│  │     String          │  │  ├──────────────┤  ├───────────┤   │  │
-│  └─────────────────────┘  │  │- address1    │  │- number   │   │  │
-│                           │  │- address2    │  └───────────┘   │  │
-│  ┌─────────────────────┐  │  │- city        │                  │  │
-│  │   ServiceOption     │  │  │- state       │                  │  │
-│  ├─────────────────────┤  │  │- zipCode     │                  │  │
-│  │ - id: String        │  │  └──────────────┘                  │  │
-│  │ - description:      │  └─────────────────────────────────────┘  │
-│  │     String          │                                           │
-│  └─────────────────────┘                                           │
-└─────────────────────────────────────────────────────────────────────┘
-```
+## 5. 実装イメージ (Implementation)
+
+### Akka Typed Actor (Scala)
 
 ```scala
-case class CustomerInformation(
-    val name: String,
-    val federalTaxId: String)
+import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.scaladsl.Behaviors
 
-case class ContactInformation(
-    val postalAddress: PostalAddress,
-    val telephone: Telephone)
+// ドメインモデル
+case class CustomerRegistration(
+  customerId: String,
+  name: String,
+  contact: String,
+  taxId: String
+)
 
-case class PostalAddress(
-    val address1: String,
-    val address2: String,
-    val city: String,
-    val state: String,
-    val zipCode: String)
+case class ProcessingState(
+  registration: CustomerRegistration,
+  customerCreated: Boolean = false,
+  contactSetup: Boolean = false,
+  creditChecked: Boolean = false
+)
 
-case class Telephone(val number: String)
+// Routing Slip付きメッセージ
+case class RoutingSlipMessage[T](
+  payload: T,
+  routingSlip: List[ActorRef[RoutingSlipMessage[T]]],
+  completionHandler: ActorRef[T]
+)
 
-case class ServiceOption(
-    val id: String,
-    val description: String)
+// Routing Slip生成器
+object RoutingSlipGenerator {
+  sealed trait Command
+  case class RegisterCustomer(
+    registration: CustomerRegistration,
+    replyTo: ActorRef[ProcessingState]
+  ) extends Command
 
-case class RegistrationData(
-    val customerInformation: CustomerInformation,
-    val contactInformation: ContactInformation,
-    val serviceOption: ServiceOption)
-```
+  def apply(
+    createCustomerStep: ActorRef[RoutingSlipMessage[ProcessingState]],
+    setupContactStep: ActorRef[RoutingSlipMessage[ProcessingState]],
+    checkCreditStep: ActorRef[RoutingSlipMessage[ProcessingState]]
+  ): Behavior[Command] =
+    Behaviors.receive { (context, command) =>
+      command match {
+        case RegisterCustomer(registration, replyTo) =>
+          context.log.info(s"Generating routing slip for ${registration.customerId}")
 
----
+          // Routing Slipを生成（処理順序を定義）
+          val routingSlip = List(
+            createCustomerStep,
+            setupContactStep,
+            checkCreditStep
+          )
 
-## Routing Slip の実装
+          val initialState = ProcessingState(registration)
+          val message = RoutingSlipMessage(
+            payload = initialState,
+            routingSlip = routingSlip,
+            completionHandler = replyTo
+          )
 
-### ProcessStep と RegistrationProcess
+          // 最初のステップに送信
+          routingSlip.head ! message.copy(
+            routingSlip = routingSlip.tail
+          )
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                      RegistrationProcess                            │
-├─────────────────────────────────────────────────────────────────────┤
-│  processId: String                                                  │
-│  currentStep: Int (現在のステップ位置)                               │
-│                                                                     │
-│  processSteps: Seq[ProcessStep]                                     │
-│  ┌─────────────────────────────────────────────────────────────┐   │
-│  │ [0]ProcessStep    [1]ProcessStep    [2]ProcessStep    ...   │   │
-│  │  ├─ name          ├─ name           ├─ name                 │   │
-│  │  └─ processor     └─ processor      └─ processor            │   │
-│  │     (ActorRef)       (ActorRef)        (ActorRef)           │   │
-│  └─────────────────────────────────────────────────────────────┘   │
-│                                                                     │
-│  メソッド:                                                          │
-│  - isCompleted: Boolean  (currentStep >= processSteps.size)        │
-│  - nextStep(): ProcessStep (次のステップを取得)                      │
-│  - stepCompleted(): RegistrationProcess (ステップ完了をマーク)       │
-└─────────────────────────────────────────────────────────────────────┘
-```
-
-各 `ProcessStep` は**名前**と**ステップを実行するアクターへの参照**を持つ。  
-`RegistrationProcess` は以下を知っている：
-- 各ステップの完了をマークする方法
-- プロセス全体が完了したかどうかを判断する方法
-- 次に処理されるステップを取得する方法
-
-**設計上、プロセス内のすべてのアクターが同じメッセージ `RegisterCustomer` を受け取る。**
-
-```scala
-case class ProcessStep(
-    val name: String,
-    val processor: ActorRef)
-
-case class RegistrationProcess(
-    val processId: String,
-    val processSteps: Seq[ProcessStep],
-    val currentStep: Int) {
-
-  def this(
-      processId: String,
-      processSteps: Seq[ProcessStep]) {
-    this(processId, processSteps, 0)
-  }
-
-  def isCompleted: Boolean = {
-    currentStep >= processSteps.size
-  }
-
-  def nextStep(): ProcessStep = {
-    if (isCompleted) {
-      throw new IllegalStateException(
-              "Process had already completed.")
+          Behaviors.same
+      }
     }
-    processSteps(currentStep)
-  }
-
-  def stepCompleted(): RegistrationProcess = {
-    new RegistrationProcess(
-            processId,
-            processSteps,
-            currentStep + 1)
-  }
 }
-```
 
----
+// 処理ステップの基底トレイト
+object ProcessStep {
+  def apply[T](
+    name: String,
+    process: T => T
+  ): Behavior[RoutingSlipMessage[T]] =
+    Behaviors.receive { (context, message) =>
+      context.log.info(s"$name processing...")
 
-## RegisterCustomer メッセージ
+      // 1. 自身の処理を実行
+      val processedPayload = process(message.payload)
 
-`RegisterCustomer` メッセージは一種の **Envelope Wrapper (314)**。
+      // 2. 次のステップを確認
+      message.routingSlip match {
+        case nextStep :: remainingSlip =>
+          // 次のステップへ転送
+          context.log.info(s"$name forwarding to next step")
+          nextStep ! RoutingSlipMessage(
+            payload = processedPayload,
+            routingSlip = remainingSlip,
+            completionHandler = message.completionHandler
+          )
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                       RegisterCustomer                              │
-│                      (Envelope Wrapper)                             │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│   ┌─────────────────────┐    ┌──────────────────────┐              │
-│   │  registrationData   │    │ registrationProcess  │              │
-│   │  (RegistrationData) │    │(RegistrationProcess) │              │
-│   └─────────────────────┘    └──────────────────────┘              │
-│                                                                     │
-│   advance() メソッド:                                               │
-│   1. registrationProcess.stepCompleted で currentStep + 1          │
-│   2. 完了していなければ、次のステップのアクターに                     │
-│      新しい RegisterCustomer を送信                                 │
-│   3. RoutingSlip.completedStep() を呼び出し                        │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+        case Nil =>
+          // 全ステップ完了
+          context.log.info(s"$name is final step, sending completion")
+          message.completionHandler ! processedPayload
+      }
 
-アクターが `RegisterCustomer` メッセージを受信すると：
-1. プロセス内の特定のステップを実行するために必要な `RegistrationData` の部分を使用
-2. 最後から2番目の操作として、`RegistrationProcess` を次のステップに進め、そのアクターにディスパッチ
-3. 各アクターは受信した `RegisterCustomer` メッセージの `advance()` メソッドを使用してこれを行う
-
-`advance()` メソッドは新しいイミュータブルな `RegisterCustomer` メッセージを作成するが、`currentStep` インデックスは実行されたステップの次を指すようにインクリメントされる。
-
-```scala
-case class RegisterCustomer(
-    val registrationData: RegistrationData,
-    val registrationProcess: RegistrationProcess) {
-
-  def advance():Unit = {
-    val advancedProcess =
-            registrationProcess.stepCompleted
-    if (!advancedProcess.isCompleted) {
-      advancedProcess.nextStep().processor !
-        RegisterCustomer(
-                registrationData,
-                advancedProcess)
+      Behaviors.same
     }
-    RoutingSlip.completedStep()
-  }
+}
+
+// 具体的な処理ステップ
+object CreateCustomerStep {
+  def apply(): Behavior[RoutingSlipMessage[ProcessingState]] =
+    ProcessStep("CreateCustomer", state => {
+      // 顧客作成ロジック
+      println(s"Creating customer: ${state.registration.name}")
+      state.copy(customerCreated = true)
+    })
+}
+
+object SetupContactStep {
+  def apply(): Behavior[RoutingSlipMessage[ProcessingState]] =
+    ProcessStep("SetupContact", state => {
+      // 連絡先設定ロジック
+      println(s"Setting up contact: ${state.registration.contact}")
+      state.copy(contactSetup = true)
+    })
+}
+
+object CheckCreditStep {
+  def apply(): Behavior[RoutingSlipMessage[ProcessingState]] =
+    ProcessStep("CheckCredit", state => {
+      // 与信チェックロジック
+      println(s"Checking credit for: ${state.registration.taxId}")
+      state.copy(creditChecked = true)
+    })
+}
+
+// 使用例
+object RoutingSlipExample {
+  def apply(): Behavior[Nothing] =
+    Behaviors.setup[Nothing] { context =>
+      // 処理ステップを作成
+      val createCustomer = context.spawn(CreateCustomerStep(), "createCustomer")
+      val setupContact = context.spawn(SetupContactStep(), "setupContact")
+      val checkCredit = context.spawn(CheckCreditStep(), "checkCredit")
+
+      // Routing Slip生成器を作成
+      val generator = context.spawn(
+        RoutingSlipGenerator(createCustomer, setupContact, checkCredit),
+        "generator"
+      )
+
+      // 完了ハンドラ
+      val completionHandler = context.spawn(
+        Behaviors.receiveMessage[ProcessingState] { state =>
+          println(s"Registration complete for ${state.registration.customerId}")
+          println(s"  customerCreated: ${state.customerCreated}")
+          println(s"  contactSetup: ${state.contactSetup}")
+          println(s"  creditChecked: ${state.creditChecked}")
+          Behaviors.same
+        },
+        "completionHandler"
+      )
+
+      // 顧客登録を開始
+      generator ! RoutingSlipGenerator.RegisterCustomer(
+        CustomerRegistration("CUST-001", "John Doe", "john@example.com", "123-45-6789"),
+        completionHandler
+      )
+
+      Behaviors.empty
+    }
 }
 ```
 
----
+## 6. リンクと関係性 (Network Knowledge)
 
-## メッセージフロー全体図
+### 関連パターン:
+- [[process_manager|Process Manager]] (拡張: 条件分岐・ループが必要な場合)
+- [[pipes_and_filters|Pipes and Filters]] (基盤: フィルタチェーンの概念)
+- [[content_based_router|Content-Based Router]] (比較: 静的 vs 動的ルーティング)
+- [[message_router|Message Router]] (汎化: ルーティングの基本概念)
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                    RegisterCustomer メッセージのフロー                  │
-└────────────────────────────────────────────────────────────────────────┘
+### 構成要素:
+- [[message_channel|Message Channel]] - ステップ間の通信
+- [[return_address|Return Address]] - 処理完了の通知先
 
-    [RoutingSlip Driver]
-           │
-           │ RegisterCustomer(data, process[currentStep=0])
-           v
-    ┌────────────────┐
-    │ CustomerVault  │  Step 1: 顧客作成
-    │                │  - customerInformation を使用
-    └───────┬────────┘
-            │ advance() → 新しい RegisterCustomer(data, process[currentStep=1])
-            v
-    ┌────────────────┐
-    │ ContactKeeper  │  Step 2: 連絡先情報記録
-    │                │  - contactInformation を使用
-    └───────┬────────┘
-            │ advance() → 新しい RegisterCustomer(data, process[currentStep=2])
-            v
-    ┌────────────────┐
-    │ ServicePlanner │  Step 3: サービスプラン選択
-    │                │  - serviceOption を使用
-    └───────┬────────┘
-            │ advance() → 新しい RegisterCustomer(data, process[currentStep=3])
-            v
-    ┌────────────────┐
-    │ CreditChecker  │  Step 4: 与信チェック
-    │                │  - federalTaxId を使用
-    └───────┬────────┘
-            │ advance() → isCompleted = true (これ以上送信しない)
-            v
-    [Process Completed]
-```
-
----
-
-## ドライバー（RoutingSlip オブジェクト）
-
-`RoutingSlip` オブジェクトは `RegistrationProcess` を `ProcessStep` インスタンスで構成し、`currentStep` を 0（最初のステップ）に初期化する。
-
-```scala
-object RoutingSlip extends CompletableApp(4) {
-  val processId = java.util.UUID.randomUUID().toString
-
-  val step1 = ProcessStep(
-          "create_customer",
-          ServiceRegistry.customerVault(
-                  system,
-                  processId))
-
-  val step2 = ProcessStep(
-          "set_up_contact_info",
-          ServiceRegistry.contactKeeper(
-                  system,
-                  processId))
-
-  val step3 = ProcessStep(
-          "select_service_plan",
-          ServiceRegistry.servicePlanner(
-                  system,
-                  processId))
-
-  val step4 = ProcessStep(
-          "check_credit",
-          ServiceRegistry.creditChecker(
-                  system,
-                  processId))
-
-  val registrationProcess =
-      new RegistrationProcess(
-              processId,
-              Vector(
-                step1,
-                step2,
-                step3,
-                step4))
-
-  val registrationData =
-      new RegistrationData(
-        CustomerInformation(
-                "ABC, Inc.", "123-45-6789"),
-        ContactInformation(
-          PostalAddress(
-                  "123 Main Street", "Suite 100",
-                  "Boulder", "CO", "80301"),
-          Telephone("303-555-1212")),
-        ServiceOption(
-                "99-1203",
-                "A description of 99-1203."))
-
-  val registerCustomer =
-      RegisterCustomer(
-              registrationData,
-              registrationProcess)
-
-  registrationProcess
-    .nextStep
-    .processor ! registerCustomer
-
-  awaitCompletion
-  println("RoutingSlip: is completed.")
-}
-```
-
----
-
-## ServiceRegistry
-
-処理ステップアクターを検索するために `RoutingSlip` は `ServiceRegistry` オブジェクトを使用する。
-
-`ServiceRegistry` は特定のアクターがリクエストされるたびに**新しいアクターインスタンスを作成**する。同じアクターインスタンスを再利用することも可能（各1つだけ作成）だが、新規顧客がまれにしか登録されない場合は不要。
-
-**個々のアクターはクリーンアップする必要があり、これは各アクターが簡単に引き受けることができる責任。**
-
-```scala
-object ServiceRegistry {
-  def contactKeeper(
-      system: ActorSystem,
-      id: String) = {
-    system.actorOf(
-            Props[ContactKeeper],
-            "contactKeeper-" + id)
-  }
-
-  def creditChecker(
-          system: ActorSystem,
-          id: String) = {
-    system.actorOf(Props[CreditChecker],
-            "creditChecker-" + id)
-  }
-
-  def customerVault(
-      system: ActorSystem,
-      id: String) = {
-    system.actorOf(Props[CustomerVault],
-            "customerVault-" + id)
-  }
-
-  def servicePlanner(
-      system: ActorSystem,
-      id: String) = {
-    system.actorOf(Props[ServicePlanner],
-            "servicePlanner-" + id)
-  }
-}
-```
-
----
-
-## 個々のアクター
-
-アクターが特定のビジネスロジックの処理を終了するとすぐに、`RegisterCustomer` を次のステップに進めてから**自身を終了**するようにリクエストする。
-
-```scala
-class CreditChecker extends Actor {
-  def receive = {
-    case registerCustomer: RegisterCustomer =>
-      val federalTaxId =
-              registerCustomer.registrationData
-                .customerInformation.federalTaxId
-
-      println(s"CreditChecker: handling register" +
-        s"customer to perform credit check: $federalTaxId")
-
-      registerCustomer.advance()
-
-      context.stop(self)
-    case message: Any =>
-      println(s"CreditChecker: unexpected: $message")
-  }
-}
-
-class ContactKeeper extends Actor {
-  def receive = {
-    case registerCustomer: RegisterCustomer =>
-      val contactInfo =
-              registerCustomer.registrationData
-                .contactInformation
-
-      println(s"ContactKeeper: handling register" +
-        s"customer to keep contact information: $contactInfo")
-
-      registerCustomer.advance()
-
-      context.stop(self)
-    case message: Any =>
-      println(s"ContactKeeper: unexpected: $message")
-  }
-}
-
-class CustomerVault extends Actor {
-  def receive = {
-    case registerCustomer: RegisterCustomer =>
-      val customerInformation =
-              registerCustomer.registrationData
-                .customerInformation
-
-      println(s"CustomerVault: handling register" +
-        s"customer to create a new customer: $customerInformation")
-
-      registerCustomer.advance()
-
-      context.stop(self)
-    case message: Any =>
-      println(s"CustomerVault: unexpected: $message")
-  }
-}
-
-class ServicePlanner extends Actor {
-  def receive = {
-    case registerCustomer: RegisterCustomer =>
-      val serviceOption =
-              registerCustomer
-                .registrationData.serviceOption
-
-      println(s"ServicePlanner: handling register" +
-        s"customer to plan a new customer service: $serviceOption")
-
-      registerCustomer.advance()
-
-      context.stop(self)
-    case message: Any =>
-      println(s"ServicePlanner: unexpected: $message")
-  }
-}
-```
-
----
-
-## プロセス出力
-
-```
-CustomerVault: handling register customer to create
- a new customer:
-   CustomerInformation(ABC, Inc.,123-45-6789)
-ContactKeeper: handling register customer to keep
- contact information:
-   ContactInformation(
-     PostalAddress(123 Main Street,Suite 100,Boulder,
-     CO,80301),
-     Telephone(303-555-1212))
-ServicePlanner: handling register customer to plan a
- new customer service:
-   ServiceOption(99-1203,A description of 99-1203.)
-CreditChecker: handling register customer to perform
- credit check: 123-45-6789
-RoutingSlip: is completed.
-```
-
----
-
-## 柔軟性
-
-`RoutingSlip` ドライバーオブジェクトが `RegistrationProcess` を組み立てる方法は変更可能：
-
-- 全体的なプロセスが成功するような**任意の論理的な順序**でステップのシーケンスを配置できる
-- ステップを**追加**したり、現在のステップの**間に挿入**したりすることも可能
-- Routing Slip の実装は、ステップの進行が Scala の `Seq`（この例では `Vector` として実装）から駆動されるため、**正しく機能し続ける**
-
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         柔軟なステップ構成                           │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  元の構成:     [Step1] → [Step2] → [Step3] → [Step4]               │
-│                                                                     │
-│  順序変更可能: [Step2] → [Step1] → [Step4] → [Step3]               │
-│                                                                     │
-│  挿入可能:     [Step1] → [NewStep] → [Step2] → [Step3] → [Step4]   │
-│                                                                     │
-│  ※ Seq (Vector) ベースなので柔軟に対応可能                          │
-└─────────────────────────────────────────────────────────────────────┘
-```
+### 次のステップ:
+- [[process_manager|Process Manager]] - 条件分岐やループが必要な場合
+- [[composed_message_processor|Composed Message Processor]] - 分割→処理→統合のパターン

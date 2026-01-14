@@ -1,603 +1,232 @@
 # Recipient List
 
-## 概念図
+## 1. 3行要約 (Feynman Technique)
+> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
+- 「メーリングリスト」のような役割。1通のメールを書くと、リストに登録された全員にコピーが届く
+- メッセージの内容を検査して、動的に受信者リストを計算し、全員にメッセージのコピーを送信
+- 核心的価値：**1つのメッセージを複数の関連する受信者に配信**
 
-```
-         ┌─────────────────────────────────────────┐
-         │           Recipient List                │
-         │                                         │
-         │    ┌─────┐      ┌─────┐                │
-         │    │     │      │     │────────────────┼───▶
-         │    │     │      │     │                │
-    ────▶│───▶│  ◁  │─────▶│     │────────────────┼───▶
-         │    │     │      │     │                │
-         │    │     │      │     │────────────────┼───▶
-         │    └─────┘      └─────┘                │
-         │                                         │
-         └─────────────────────────────────────────┘
-```
+## 2. 解決する課題 (Context & Problem)
+> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
 
----
+- **Before:**
+  - 複数の受信者にメッセージを送信したいが、受信者が動的に決まる
+  - 例：見積依頼を複数のサプライヤーに送りたいが、注文金額によって対象サプライヤーが異なる
+  - 送信者が全ての受信者とその条件を管理するのは困難
 
-## 定義
+- **Trigger:**
+  - 動的に指定された受信者のリストにメッセージをルーティングしたい
+  - 受信者リストをメッセージ内容に基づいて計算したい
+  - 複数の受信者に同じメッセージ（のコピー）を送信したい
 
-Recipient Listは、電子メールのTo（宛先）およびCc（カーボンコピー）フィールドに類似したパターンである。電子メールで任意の数の意図された受信者を指定するように、Recipient Listでも複数の受信者にメッセージを送信する。
+## 3. ソリューションと構造 (Structure & Visual)
+> **目的:** Dual Coding（文字と図）により記憶定着を図る。
 
----
+### 仕組み
+各受信者に対してチャネルを定義し、Recipient Listを使用して：
+1. 受信メッセージを検査
+2. 目的の受信者リストを計算
+3. すべての関連チャネルにメッセージのコピーを転送
 
-## 受信者の決定方法
+メッセージ内容は通常、修正されない。
 
-| 決定方法 | 説明 |
-|---------|------|
-| **事前決定型** | 送信されるメッセージの種類に応じて受信者があらかじめ決まっている |
-| **動的決定型** | ビジネスルールのセットによって受信者が決定される（Dynamic Router (237) の特性を持つ） |
+### 構造図
 
----
+```mermaid
+graph LR
+    subgraph "Recipient List Pattern"
+        IN[入力メッセージ] --> RL{Recipient<br/>List}
+        RL -->|コピー| R1[Recipient A]
+        RL -->|コピー| R2[Recipient B]
+        RL -->|コピー| R3[Recipient C]
+        RL -.->|条件不一致| R4[Recipient D]
+    end
 
-## システム構成図（Figure 7.4）
-
-```
-                                                     ┌─────────┐
-                                                ┌───▶│ 📄      │───▶ (A)
-                                                │    └─────────┘
-                                                │
-  ┌─────────┐                                   │    ┌─────────┐
-  │  TypeC  │        ┌───────────────┐          ├───▶│ 📄      │───▶ (B)
-  │ Message │───────▶│  Recipient    │──────────┤    └─────────┘
-  │  📄     │        │    List       │          │
-  └─────────┘        │   ┌───┐       │          │         (C)
-                     │   │ ◁ │       │          │
-                     │   └───┘       │          │    ┌─────────┐
-                     └───────────────┘          └───▶│ 📄      │───▶ (D)
-                                                     └─────────┘
-
-※ Recipient Listを使用して、特定のMessage (130) を受信すべきアクターを識別する
+    style RL fill:#ffcc80
 ```
 
----
+### 受信者リストの計算フロー
 
-## 具体例：価格見積システム
+```mermaid
+sequenceDiagram
+    participant Sender as 送信者
+    participant RL as Recipient List
+    participant R1 as Recipient 1
+    participant R2 as Recipient 2
+    participant R3 as Recipient 3
 
-この例は価格見積を行うシステムである。`MountaineeringSuppliesOrderProcessor`が`RequestForQuotation`メッセージを受信すると、ビジネスルールのセットに基づいてRecipient Listを計算する。これはDynamic Router (237) の一種である。
+    Sender->>RL: Message(totalPrice=$500)
+    Note over RL: 受信者リストを計算<br/>$100-$1000: R1, R2<br/>$500-$10000: R3
+    RL->>R1: Message(copy)
+    RL->>R2: Message(copy)
+    RL->>R3: Message(copy)
+```
 
-### 見積エンジン（Quote Engines）
+## 4. トレードオフと制約 (Critical Thinking)
 
-`MountaineeringSuppliesOrderProcessor`は任意の数の見積サービスから`PriceQuoteInterest`メッセージを受信する。各見積エンジンはアクターである：
+### Pros (利点):
+- **動的配信**: メッセージ内容に基づいて受信者を決定
+- **疎結合**: 送信者は受信者を知らなくて良い
+- **柔軟性**: 受信者の追加・削除が容易
+- **効率性**: 必要な受信者にのみ配信
 
-| 見積エンジン | 対象価格帯 | 説明 |
-|------------|----------|------|
-| BudgetHikersPriceQuotes | $1.00 〜 $1,000.00 | 低価格帯向け |
-| HighSierraPriceQuotes | $100.00 〜 $10,000.00 | 中価格帯向け |
-| MountainAscentPriceQuotes | $70.00 〜 $5,000.00 | 中価格帯向け |
-| PinnacleGearPriceQuotes | $250.00 〜 $500,000.00 | 高価格帯向け（エベレスト遠征など） |
-| RockBottomOuterwearPriceQuotes | $0.50 〜 $7,500.00 | 幅広い価格帯 |
+### Cons (欠点・副作用):
+- **メッセージ増幅**: 受信者数に比例してメッセージ数が増加
+- **結果集約の複雑さ**: 応答を集約する場合、Aggregatorが必要
+- **一貫性**: 複数の受信者への配信の原子性が保証されない
+- **受信者リスト計算コスト**: 複雑なルールの場合オーバーヘッドが発生
 
-### 関心登録の仕組み
+### Anti-Pattern:
+- 受信者リストを静的にハードコード（変更時に再デプロイが必要）
+- 全ての受信者に無条件で送信（Publish-Subscribe Channelを使うべき）
+- 応答の集約を考慮せずに使用
 
-各見積エンジンアクターは作成時に`MountaineeringSuppliesOrderProcessor`への参照を受け取る。見積エンジンアクターにとって、この参照は「関心レジストラ」に過ぎない。見積エンジンアクターは即座に`PriceQuoteInterest`メッセージをレジストラに送信し、どの条件下で`RequestPriceQuote`メッセージを受け入れるかを示す。
+## 5. 実装イメージ (Implementation)
 
-### 関心登録の例
+### Akka Typed Actor (Scala)
 
 ```scala
-// Budget Hikers: $1〜$1,000の注文を受け入れる
-interestRegistrar ! PriceQuoteInterest(
-            self.path.toString, self, 1.00, 1000.00)
+import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.scaladsl.Behaviors
 
-// Pinnacle Gear: $250〜$500,000の注文を受け入れる
-interestRegistrar ! PriceQuoteInterest(
-            self.path.toString, self, 250.00, 500000.00)
-```
-
----
-
-## 実装例（Scala/Akka）
-
-### メッセージ定義
-
-```scala
-package co.vaughnvernon.reactiveenterprise.recipientlist
-
-import akka.actor._
-import co.vaughnvernon.reactiveenterprise._
-
-// 見積依頼
+// ドメインモデル
 case class RequestForQuotation(
-        rfqId: String,
-        retailItems: Seq[RetailItem]) {
-  val totalRetailPrice: Double =
-        retailItems.map(retailItem =>
-              retailItem.retailPrice).sum
+  rfqId: String,
+  retailItems: Seq[RetailItem]
+) {
+  val totalRetailPrice: Double = retailItems.map(_.retailPrice).sum
 }
 
-// 小売アイテム
-case class RetailItem(
-        itemId: String,
-        retailPrice: Double)
+case class RetailItem(itemId: String, retailPrice: Double)
 
-// 価格見積への関心登録
-case class PriceQuoteInterest(
-        path: String,
-        quoteProcessor: ActorRef,
-        lowTotalRetail: Money,
-        highTotalRetail: Money)
-
-// 価格見積リクエスト
+// 見積リクエスト
 case class RequestPriceQuote(
-        rfqId: String,
-        itemId: String,
-        retailPrice: Money,
-        orderTotalRetailPrice: Money)
+  rfqId: String,
+  itemId: String,
+  retailPrice: Double,
+  orderTotalRetailPrice: Double
+)
 
-// 価格見積
-case class PriceQuote(
-        rfqId: String,
-        itemId: String,
-        retailPrice: Money,
-        discountPrice: Money)
-```
+// 受信者の興味範囲
+case class PriceQuoteInterest(
+  quoterId: String,
+  quoteProcessor: ActorRef[RequestPriceQuote],
+  lowTotalRetail: Double,
+  highTotalRetail: Double
+)
 
-### ドライバアプリケーション
+// Recipient List
+object RecipientList {
+  sealed trait Command
+  case class ProcessRfq(rfq: RequestForQuotation) extends Command
+  case class RegisterInterest(interest: PriceQuoteInterest) extends Command
 
-```scala
-object RecipientList extends CompletableApp(5) {
-  // 注文プロセッサ（Recipient List管理）
-  val orderProcessor =
-          system.actorOf(
-            Props[MountaineeringSuppliesOrderProcessor],
-            "orderProcessor")
+  def apply(): Behavior[Command] = router(Vector.empty)
 
-  // 見積エンジンの作成
-  system.actorOf(
-            Props(classOf[BudgetHikersPriceQuotes],
-                    orderProcessor),
-            "budgetHikers")
-  system.actorOf(
-            Props(classOf[HighSierraPriceQuotes],
-                    orderProcessor),
-            "highSierra")
-  system.actorOf(
-            Props(classOf[MountainAscentPriceQuotes],
-                    orderProcessor),
-            "mountainAscent")
-  system.actorOf(
-            Props(classOf[PinnacleGearPriceQuotes],
-                    orderProcessor),
-            "pinnacleGear")
-  system.actorOf(
-            Props(classOf[RockBottomOuterwearPriceQuotes],
-                    orderProcessor),
-            "rockBottomOuterwear")
+  private def router(
+    interests: Vector[PriceQuoteInterest]
+  ): Behavior[Command] =
+    Behaviors.receive { (context, command) =>
+      command match {
+        case RegisterInterest(interest) =>
+          context.log.info(s"Registered: ${interest.quoterId}")
+          router(interests :+ interest)
 
-  // 見積依頼の送信
-  orderProcessor ! RequestForQuotation("123",
-      Vector(RetailItem("1", 29.95),
-            RetailItem("2", 99.95),
-            RetailItem("3", 14.95)))
+        case ProcessRfq(rfq) =>
+          // 受信者リストを動的に計算
+          val recipients = calculateRecipientList(rfq, interests)
+          context.log.info(
+            s"RFQ ${rfq.rfqId} dispatched to ${recipients.size} recipients"
+          )
 
-  orderProcessor ! RequestForQuotation("125",
-      Vector(RetailItem("4", 39.99),
-            RetailItem("5", 199.95),
-            RetailItem("6", 149.95),
-            RetailItem("7", 724.99)))
-
-  orderProcessor ! RequestForQuotation("129",
-      Vector(RetailItem("8", 119.99),
-            RetailItem("9", 499.95),
-            RetailItem("10", 519.00),
-            RetailItem("11", 209.50)))
-
-  orderProcessor ! RequestForQuotation("135",
-      Vector(RetailItem("12", 0.97),
-            RetailItem("13", 9.50),
-            RetailItem("14", 1.99)))
-
-  orderProcessor ! RequestForQuotation("140",
-      Vector(RetailItem("15", 107.50),
-            RetailItem("16", 9.50),
-            RetailItem("17", 599.99),
-            RetailItem("18", 249.95),
-            RetailItem("19", 789.99)))
-
-  ...
-}
-```
-
----
-
-## MountaineeringSuppliesOrderProcessor（Recipient List管理）
-
-```scala
-import scala.collection.mutable.Map
-
-class MountaineeringSuppliesOrderProcessor
-    extends Actor {
-
-  // 関心登録レジストリ
-  val interestRegistry = Map[String, PriceQuoteInterest]()
-
-  // Recipient List の計算
-  def calculateRecipientList(
-      rfq: RequestForQuotation): Iterable[ActorRef] = {
-    for {
-      interest <- interestRegistry.values
-      if (rfq.totalRetailPrice >= interest.lowTotalRetail)
-      if (rfq.totalRetailPrice <= interest.highTotalRetail)
-    } yield interest.quoteProcessor
-  }
-
-  // Recipient List への配信
-  def dispatchTo(
-      rfq: RequestForQuotation,
-      recipientList: Iterable[ActorRef]) = {
-    recipientList.map { recipient =>
-      rfq.retailItems.map { retailItem =>
-        println("OrderProcessor: "
-              + rfq.rfqId
-              + " item: "
-              + retailItem.itemId
-              + " to: "
-              + recipient.path.toString)
-        recipient ! RequestPriceQuote(
-                      rfq.rfqId,
-                      retailItem.itemId,
-                      retailItem.retailPrice,
-                      rfq.totalRetailPrice)
+          // 各受信者にメッセージのコピーを送信
+          recipients.foreach { interest =>
+            rfq.retailItems.foreach { item =>
+              interest.quoteProcessor ! RequestPriceQuote(
+                rfq.rfqId,
+                item.itemId,
+                item.retailPrice,
+                rfq.totalRetailPrice
+              )
+            }
+          }
+          Behaviors.same
       }
     }
+
+  private def calculateRecipientList(
+    rfq: RequestForQuotation,
+    interests: Vector[PriceQuoteInterest]
+  ): Vector[PriceQuoteInterest] = {
+    val dominated = rfq.totalRetailPrice
+    interests.filter { interest =>
+      dominated >= interest.lowTotalRetail &&
+      dominated <= interest.highTotalRetail
+    }
   }
+}
 
-  def receive = {
-    // 関心登録
-    case interest: PriceQuoteInterest =>
-      interestRegistry(interest.path) = interest
+// 見積エンジン
+object PriceQuoteProcessor {
+  def apply(quoterId: String, discountRate: Double): Behavior[RequestPriceQuote] =
+    Behaviors.receive { (context, request) =>
+      val discountPrice = request.retailPrice * (1 - discountRate)
+      context.log.info(
+        s"$quoterId: ${request.itemId} -> $discountPrice"
+      )
+      Behaviors.same
+    }
+}
 
-    // 価格見積の受信
-    case priceQuote: PriceQuote =>
-      println(s"OrderProcessor: received: $priceQuote")
+// 使用例
+object RecipientListExample {
+  def apply(): Behavior[Nothing] =
+    Behaviors.setup[Nothing] { context =>
+      val recipientList = context.spawn(RecipientList(), "recipientList")
 
-    // 見積依頼の処理
-    case rfq: RequestForQuotation =>
-      val recipientList = calculateRecipientList(rfq)
-      dispatchTo(rfq, recipientList)
+      // 見積エンジンを登録
+      val budgetHikers = context.spawn(
+        PriceQuoteProcessor("BudgetHikers", 0.05),
+        "budgetHikers"
+      )
+      recipientList ! RecipientList.RegisterInterest(
+        PriceQuoteInterest("BudgetHikers", budgetHikers, 1.0, 1000.0)
+      )
 
-    case message: Any =>
-      println(s"OrderProcessor: unexpected: $message")
-  }
+      val highSierra = context.spawn(
+        PriceQuoteProcessor("HighSierra", 0.03),
+        "highSierra"
+      )
+      recipientList ! RecipientList.RegisterInterest(
+        PriceQuoteInterest("HighSierra", highSierra, 100.0, 10000.0)
+      )
+
+      // 見積依頼を送信
+      recipientList ! RecipientList.ProcessRfq(
+        RequestForQuotation("RFQ-001", Seq(
+          RetailItem("item1", 29.95),
+          RetailItem("item2", 99.95)
+        ))
+      )
+
+      Behaviors.empty
+    }
 }
 ```
 
-### calculateRecipientList の動作
+## 6. リンクと関係性 (Network Knowledge)
 
-`MountaineeringSuppliesOrderProcessor`の`calculateRecipientList()`メソッドはScalaの**for内包表記（for comprehension）**を使用して、登録されたビジネスルールに基づいてすべての受信者を決定する。
+### 関連パターン:
+- [[aggregator|Aggregator]] - 複数の応答を集約（Scatter-Gatherで組み合わせ）
+- [[scatter_gather|Scatter-Gather]] (組み合わせ: Recipient List + Aggregator)
+- [[content_based_router|Content-Based Router]] (比較: 単一宛先 vs 複数宛先)
+- [[dynamic_router|Dynamic Router]] (比較: 動的ルール更新の仕組み)
+- [[message_filter|Message Filter]] (比較: 通過/破棄 vs 複数宛先)
 
-### 配信ロジック
+### 構成要素:
+- [[message_channel|Message Channel]] - 各受信者へのチャネル
+- [[correlation_identifier|Correlation Identifier]] - 応答の関連付け
 
-`RequestForQuotation`メッセージを受信すると、Recipient Listを計算してからアイテムをディスパッチする：
-1. `RequestForQuotation`の`totalRetailPrice`が関心の`lowTotalRetail`と`highTotalRetail`の間にあるかチェック
-2. 条件を満たす見積エンジンがRecipient Listに含まれる
-3. 各受信者に対して、注文内の各アイテムについて`RequestPriceQuote`メッセージを送信
-
----
-
-## 見積エンジンの実装
-
-各見積エンジンの基本的な違いは`discountPercentage()`の実装である。意図的に抽象ベースクラスの継承（クラス拡張）を避けている。異なる小売業者の価格エンジンが同じベースクラスを継承することは非常に考えにくいため、類似していても各エンジンの独立した実装があることを示している。
-
-### BudgetHikersPriceQuotes
-
-```scala
-class BudgetHikersPriceQuotes(interestRegistrar: ActorRef)
-            extends Actor {
-  // 関心登録: $1〜$1,000
-  interestRegistrar ! PriceQuoteInterest(
-                        self.path.toString,
-                        self, 1.00, 1000.00)
-
-  def receive = {
-    case rpq: RequestPriceQuote =>
-      val discount = discountPercentage(
-                        rpq.orderTotalRetailPrice) *
-                        rpq.retailPrice
-      sender ! PriceQuote(rpq.rfqId, rpq.itemId,
-                        rpq.retailPrice,
-                        rpq.retailPrice - discount)
-
-    case message: Any =>
-      println(s"BudgetHikersPriceQuotes: unexpected:↩
-      $message")
-  }
-
-  def discountPercentage(
-      orderTotalRetailPrice: Double) = {
-    if (orderTotalRetailPrice <= 100.00) 0.02
-    else if (orderTotalRetailPrice <= 399.99) 0.03
-    else if (orderTotalRetailPrice <= 499.99) 0.05
-    else if (orderTotalRetailPrice <= 799.99) 0.07
-    else 0.075
-  }
-}
-```
-
-### HighSierraPriceQuotes
-
-```scala
-class HighSierraPriceQuotes(interestRegistrar: ActorRef)
-            extends Actor {
-  // 関心登録: $100〜$10,000
-  interestRegistrar ! PriceQuoteInterest(
-                        self.path.toString, self,
-                        100.00, 10000.00)
-
-  def receive = {
-    case rpq: RequestPriceQuote =>
-      val discount = discountPercentage(
-                        rpq.orderTotalRetailPrice) *
-                        rpq.retailPrice
-      sender ! PriceQuote(rpq.rfqId, rpq.itemId,
-                        rpq.retailPrice,
-                        rpq.retailPrice - discount)
-
-    case message: Any =>
-      println(s"HighSierraPriceQuotes: unexpected:↩
-      $message")
-  }
-
-  def discountPercentage(
-      orderTotalRetailPrice: Double): Double = {
-    if (orderTotalRetailPrice <= 150.00) 0.015
-    else if (orderTotalRetailPrice <= 499.99) 0.02
-    else if (orderTotalRetailPrice <= 999.99) 0.03
-    else if (orderTotalRetailPrice <= 4999.99) 0.04
-    else 0.05
-  }
-}
-```
-
-### MountainAscentPriceQuotes
-
-```scala
-class MountainAscentPriceQuotes(interestRegistrar: ActorRef)
-            extends Actor {
-  // 関心登録: $70〜$5,000
-  interestRegistrar ! PriceQuoteInterest(
-                        self.path.toString, self,
-                        70.00, 5000.00)
-
-  def receive = {
-    case rpq: RequestPriceQuote =>
-      val discount = discountPercentage(
-                        rpq.orderTotalRetailPrice) *
-                        rpq.retailPrice
-      sender ! PriceQuote(rpq.rfqId, rpq.itemId,
-                        rpq.retailPrice,
-                        rpq.retailPrice - discount)
-
-    case message: Any =>
-      println(s"MountainAscentPriceQuotes: unexpected:↩
-      $message")
-  }
-
-  def discountPercentage(
-      orderTotalRetailPrice: Double): Double = {
-    if (orderTotalRetailPrice <= 99.99) 0.01
-    else if (orderTotalRetailPrice <= 199.99) 0.02
-    else if (orderTotalRetailPrice <= 499.99) 0.03
-    else if (orderTotalRetailPrice <= 799.99) 0.04
-    else if (orderTotalRetailPrice <= 999.99) 0.045
-    else if (orderTotalRetailPrice <= 2999.99) 0.0475
-    else 0.05
-  }
-}
-```
-
-### PinnacleGearPriceQuotes
-
-```scala
-class PinnacleGearPriceQuotes(interestRegistrar: ActorRef)
-            extends Actor {
-  // 関心登録: $250〜$500,000
-  interestRegistrar ! PriceQuoteInterest(
-                        self.path.toString, self,
-                        250.00, 500000.00)
-
-  def receive = {
-    case rpq: RequestPriceQuote =>
-      val discount = discountPercentage(
-                        rpq.orderTotalRetailPrice) *
-                        rpq.retailPrice
-      sender ! PriceQuote(rpq.rfqId, rpq.itemId,
-                        rpq.retailPrice,
-                        rpq.retailPrice - discount)
-
-    case message: Any =>
-      println(s"PinnacleGearPriceQuotes: unexpected:↩
-      $message")
-  }
-
-  def discountPercentage(
-      orderTotalRetailPrice: Double): Double = {
-    if (orderTotalRetailPrice <= 299.99) 0.015
-    else if (orderTotalRetailPrice <= 399.99) 0.0175
-    else if (orderTotalRetailPrice <= 499.99) 0.02
-    else if (orderTotalRetailPrice <= 999.99) 0.03
-    else if (orderTotalRetailPrice <= 1199.99) 0.035
-    else if (orderTotalRetailPrice <= 4999.99) 0.04
-    else if (orderTotalRetailPrice <= 7999.99) 0.05
-    else 0.06
-  }
-}
-```
-
-### RockBottomOuterwearPriceQuotes
-
-```scala
-class RockBottomOuterwearPriceQuotes(
-    interestRegistrar: ActorRef)
-    extends Actor {
-  // 関心登録: $0.50〜$7,500
-  interestRegistrar ! PriceQuoteInterest(
-                        self.path.toString, self,
-                        0.50, 7500.00)
-
-  def receive = {
-    case rpq: RequestPriceQuote =>
-      val discount = discountPercentage(
-                        rpq.orderTotalRetailPrice) *
-                        rpq.retailPrice
-      sender ! PriceQuote(rpq.rfqId, rpq.itemId,
-                        rpq.retailPrice,
-                        rpq.retailPrice - discount)
-
-    case message: Any =>
-      println(s"RockBottomOuterwearPriceQuotes:↩
-      unexpected: $message")
-  }
-
-  def discountPercentage(
-      orderTotalRetailPrice: Double): Double = {
-    if (orderTotalRetailPrice <= 100.00) 0.015
-    else if (orderTotalRetailPrice <= 399.99) 0.02
-    else if (orderTotalRetailPrice <= 499.99) 0.03
-    else if (orderTotalRetailPrice <= 799.99) 0.04
-    else if (orderTotalRetailPrice <= 999.99) 0.05
-    else if (orderTotalRetailPrice <= 2999.99) 0.06
-    else if (orderTotalRetailPrice <= 4999.99) 0.07
-    else if (orderTotalRetailPrice <= 5999.99) 0.075
-    else 0.08
-  }
-}
-```
-
----
-
-## 処理フロー図
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Recipient List 処理フロー                        │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  1. 見積エンジンの関心登録                                               │
-│                                                                         │
-│  ┌──────────────────┐      PriceQuoteInterest      ┌────────────────┐   │
-│  │ BudgetHikers     │─────────────────────────────▶│                │   │
-│  │ ($1-$1,000)      │                              │                │   │
-│  └──────────────────┘                              │                │   │
-│  ┌──────────────────┐      PriceQuoteInterest      │  Mountaineering│   │
-│  │ HighSierra       │─────────────────────────────▶│  Supplies      │   │
-│  │ ($100-$10,000)   │                              │  Order         │   │
-│  └──────────────────┘                              │  Processor     │   │
-│  ┌──────────────────┐      PriceQuoteInterest      │                │   │
-│  │ MountainAscent   │─────────────────────────────▶│ (interest      │   │
-│  │ ($70-$5,000)     │                              │  Registry)     │   │
-│  └──────────────────┘                              │                │   │
-│  ┌──────────────────┐      PriceQuoteInterest      │                │   │
-│  │ PinnacleGear     │─────────────────────────────▶│                │   │
-│  │ ($250-$500,000)  │                              │                │   │
-│  └──────────────────┘                              │                │   │
-│  ┌──────────────────┐      PriceQuoteInterest      │                │   │
-│  │ RockBottom       │─────────────────────────────▶│                │   │
-│  │ ($0.50-$7,500)   │                              └────────────────┘   │
-│  └──────────────────┘                                                   │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  2. 見積依頼の処理                                                       │
-│                                                                         │
-│  RequestForQuotation                                                    │
-│  (totalRetailPrice)                                                     │
-│         │                                                               │
-│         ▼                                                               │
-│  ┌─────────────────────────────────────┐                                │
-│  │  calculateRecipientList()           │                                │
-│  │                                     │                                │
-│  │  for {                              │                                │
-│  │    interest <- interestRegistry     │                                │
-│  │    if total >= interest.low         │                                │
-│  │    if total <= interest.high        │                                │
-│  │  } yield interest.quoteProcessor    │                                │
-│  └───────────────┬─────────────────────┘                                │
-│                  │                                                      │
-│                  ▼                                                      │
-│  ┌─────────────────────────────────────┐                                │
-│  │  dispatchTo(rfq, recipientList)     │                                │
-│  │                                     │                                │
-│  │  各受信者 × 各アイテム に対して     │                                │
-│  │  RequestPriceQuote を送信           │                                │
-│  └───────────────┬─────────────────────┘                                │
-│                  │                                                      │
-│         ┌───────┼───────┬───────┬───────┐                               │
-│         ▼       ▼       ▼       ▼       ▼                               │
-│       受信者A  受信者B  受信者C  受信者D  受信者E                         │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 実行結果（抜粋）
-
-```
-OrderProcessor: 123 item: 1 to: akka://mtnSupplies/↩
-user/rockBottomOuterwear
-OrderProcessor: 123 item: 2 to: akka://mtnSupplies/↩
-user/rockBottomOuterwear
-OrderProcessor: 123 item: 3 to: akka://mtnSupplies/↩
-user/rockBottomOuterwear
-OrderProcessor: 123 item: 1 to: akka://mtnSupplies/↩
-user/mountainAscent
-...
-OrderProcessor: 140 item: 19 to: akka://mtnSupplies/↩
-user/highSierra
-OrderProcessor: received: PriceQuote(123,1,29.95,29.351)
-OrderProcessor: received: PriceQuote(123,2,99.95,↩
-97.95100000000001)
-OrderProcessor: received: PriceQuote(123,3,14.95,14.651)
-OrderProcessor: received: PriceQuote(123,1,29.95,29.351)
-OrderProcessor: received: PriceQuote(123,2,99.95,↩
-97.95100000000001)
-OrderProcessor: received: PriceQuote(123,3,14.95,14.651)
-OrderProcessor: received: PriceQuote(123,1,29.95,29.0515)
-OrderProcessor: received: PriceQuote(123,2,99.95,↩
-96.95150000000001)
-...
-OrderProcessor: received: PriceQuote(140,19,789.99,758.3904)
-```
-
----
-
-## Aggregator との関係
-
-`MountaineeringSuppliesOrderProcessor`が各見積エンジンからのすべてのデータを購入者にとって意味のある単一の見積に結合する方法は、**Aggregator (257)** パターンの主題である。
-
-Recipient ListとAggregatorを組み合わせると、**Scatter-Gather (272)** パターンの一種を形成する。
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Scatter-Gather パターン                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│                      ┌────────────┐                             │
-│                 ┌───▶│ 受信者 A   │───┐                         │
-│                 │    └────────────┘   │                         │
-│                 │    ┌────────────┐   │                         │
-│  ┌──────────┐   ├───▶│ 受信者 B   │───┤   ┌──────────────┐      │
-│  │ Recipient│───┤    └────────────┘   ├──▶│  Aggregator  │      │
-│  │   List   │   │    ┌────────────┐   │   └──────────────┘      │
-│  │ (Scatter)│   ├───▶│ 受信者 C   │───┤       (Gather)          │
-│  └──────────┘   │    └────────────┘   │                         │
-│                 │    ┌────────────┐   │                         │
-│                 └───▶│ 受信者 D   │───┘                         │
-│                      └────────────┘                             │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 参照
-
-- Dynamic Router (237)
-- Message (130)
-- Aggregator (257)
-- Scatter-Gather (272)
+### 次のステップ:
+- [[aggregator|Aggregator]] - 応答の集約が必要な場合
+- [[scatter_gather|Scatter-Gather]] - 問い合わせ→応答集約のパターン

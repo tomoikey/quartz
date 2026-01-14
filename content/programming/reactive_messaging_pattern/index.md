@@ -1,191 +1,127 @@
-# Chapter 7. Message Routing (メッセージルーティング)
+# Message Routing (メッセージルーティング)
 
-## 1. 抽象概念：メッセージルーティングの基礎と目的
-第4章「Messaging with Actors」で導入された `Message Routers (140)` の概念を拡張し、システム統合（Integration）における役割を定義する。
+## 1. 3行要約 (Feynman Technique)
+> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
+- メッセージルーティングは「郵便局の仕分け係」のような役割。届いた手紙の宛先や内容を見て、適切な配達先に振り分ける
+- 送信者は最終的な届け先を知らなくても良い。ルーターが責任を持って正しい場所に届ける
+- 核心的価値：**送信者と受信者の疎結合化**と**メッセージフローの一元管理**
 
-* **基本機能**:
-    * メッセージの「送信元（Source）」と「送信先（Destination）」を分離（Decouple）する。
-    * ルーター内にビジネスロジックを配置し、ルーティングの方法を決定する。
-    * 使用するルーターの種類に応じて、必要なビジネスロジックの量を制限することが可能。
-* **適用範囲（Scope）**:
-    * Akkaクラスタ内だけでなく、クラスタ間（Across clusters）の統合にも使用される。
-    * リモートのルーティング先（routees）へのルーティングが可能（これがない場合、Akkaベースのルーターによる統合は `Message Bridges (185)` の実装のみに限定されてしまう）。
+## 2. 解決する課題 (Context & Problem)
+> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
 
----
+- **Before:**
+  - 送信者が全ての受信者を知っている必要がある（密結合）
+  - 新しい受信者の追加時に送信者の変更が必要
+  - ルーティングロジックが各所に散在し、変更・保守が困難
 
-## 2. 具体分類：ルーターの3つのカテゴリー
-ルーターはその粒度と役割に応じて、以下の3つのカテゴリーに分類される。
+- **Trigger:**
+  - 複数のシステム間でメッセージを振り分ける必要がある
+  - メッセージの内容や条件に応じて動的に宛先を決定したい
+  - 送信者と受信者を疎結合に保ちたい
 
-### ① Simple routers（シンプル・ルーター）
-受信したメッセージの内容を検査し、特定のビジネスコンポーネントへルーティングする基本的なルーター群。
+## 3. ソリューションと構造 (Structure & Visual)
+> **目的:** Dual Coding（文字と図）により記憶定着を図る。
 
-* **Content-Based Router (228)**
-    * 受信メッセージの内容を検査し、特定のビジネスコンポーネントへルーティングする。
-    * **Message Filter (232)**: *Content-Based Router* の一種。特定のメッセージを転送せずに破棄（discard）することを選択できる。
-* **Dynamic Router (237)**
-    * ルーティングロジックが静的ではなく、アプリケーションの動的なプロパティに基づいている場合に使用する。
-* **Recipient List (245)**
-    * 単一のメッセージに基づいて、複数の受信者（recipients）へメッセージを送信する（各受信者は異なる操作を実行する）。
-* **Splitter (254)**
-    * 単一のメッセージを分割し、メッセージの異なる部分に基づいて個別の機能を実行できるようにする。
-* **Aggregator (257)**
-    * 多様な結果を単一の形式に戻す（集約する）。
-    * *Splitter* が作業を分割するため、その結果をまとめるために必要となることが多い。
-* **Resequencer (264)**
-    * メッセージを適切な順序で再収集（regather）する。
-    * *Splitter* や *Aggregator* が使用される際、メッセージの順序を整える必要がある場合に使用する。
+### ルーターの3つのカテゴリー
 
-### ② Composed routers（合成ルーター）
-任意の数の *Simple routers* を取り込み、特定のジョブを実行するために単一のルーターとして合成したもの。
+```mermaid
+graph TB
+    subgraph "Message Routing Patterns"
+        SR[Simple Routers<br/>単一メッセージの振り分け]
+        CR[Composed Routers<br/>複数ルーターの組み合わせ]
+        AR[Architectural Routers<br/>システム全体の構造]
+    end
 
-* **Composed Message Processor (270)**
-    * 合成ルーターの一例。
-* **Scatter-Gather (272)** ⚠️ TODO: ドキュメント未作成
-    * 合成ルーターの一例。*Recipient List* + *Aggregator* の組み合わせで実装される。
-* **Routing Slip (285)**
-    * 固定された線形のステップシーケンスでメッセージをルーティングする。
-    * 処理ステップが設計時に確定しており、順序が単純な場合に使用。
-* **Process Manager (299)**
-    * 動的で非線形のステップシーケンスでメッセージをルーティングする。
-    * 条件分岐、ループ、並列処理が必要な複雑なフローに使用。
-    * *Routing Slip* よりも柔軟だが、複雑性が増す。
+    SR --> CBR[Content-Based Router]
+    SR --> MF[Message Filter]
+    SR --> DR[Dynamic Router]
+    SR --> RL[Recipient List]
+    SR --> SP[Splitter]
+    SR --> AG[Aggregator]
+    SR --> RS[Resequencer]
 
-### ③ Architectural routers（アーキテクチャル・ルーター）
-様々な種類のルーターを結合し、より粒度の粗い（coarse-grained）アーキテクチャを形成するもの。
+    CR --> CMP[Composed Message Processor]
+    CR --> SG[Scatter-Gather]
+    CR --> RSL[Routing Slip]
+    CR --> PM[Process Manager]
 
-* **Pipes and Filters (135)**
-    * 様々なルーターが結合されて構成されるアーキテクチャ。
-* **Message Broker (308)**
-    * メッセージルーターのサブネットワークからなる大規模なネットワークを形成し、「ハブ・アンド・スポーク（hub-and-spoke）」型のアーキテクチャスタイルを構成するもの。
-* **Message Bus (192)**
-    * 特定のクラスの問題を解決するために使用されるもので、*Message Broker* に匹敵する概念。
-
----
-
-## 3. パターン選択ガイド
-
-### 質問1: 何を実現したいか？
-
-#### A. メッセージを適切な宛先に振り分けたい
-→ **ルーティング系パターン**へ
-
-#### B. メッセージの内容を変換したい
-→ **変換系パターン**へ
-
-#### C. 複数ステップの処理フローを構築したい
-→ **フロー系パターン**へ
-
----
-
-### ルーティング系パターンの選択
-
-```
-メッセージを振り分けるには？
-│
-├─ 内容を見て振り分ける → Content-Based Router
-│  └─ 特定条件で破棄する → Message Filter
-│
-├─ 振り分け先が動的に変わる → Dynamic Router
-│
-└─ 複数の宛先に送る → Recipient List
+    AR --> PF[Pipes and Filters]
+    AR --> MB[Message Broker]
 ```
 
-**使い分けのポイント:**
+### Simple Routers 比較表
 
-| パターン | 振り分け先の数 | 判定基準 | 典型的な用途 |
-|---------|--------------|---------|------------|
-| **Content-Based Router** | 1つ | メッセージ内容 | 注文タイプ別の在庫システム振り分け |
-| **Message Filter** | 0 or 1 | 互換性チェック | 不要メッセージの除外 |
-| **Dynamic Router** | 1つ | 動的なルール | 時間帯・負荷に応じた振り分け |
-| **Recipient List** | 複数 | メッセージ内容 | 見積依頼を複数業者に送信 |
+| パターン | 消費 | 発行 | ステートフル | 特徴 |
+|---------|------|------|------------|------|
+| [[content_based_router\|Content-Based Router]] | 1 | 1 | No | 内容に基づき単一宛先へ |
+| [[message_filter\|Message Filter]] | 1 | 0-1 | No | 条件に合わないものを破棄 |
+| [[dynamic_router\|Dynamic Router]] | 1 | 1 | No | 制御メッセージでルール更新 |
+| [[recipient_list\|Recipient List]] | 1 | N | No | 複数宛先へコピー送信 |
+| [[splitter\|Splitter]] | 1 | N | No | メッセージを分割 |
+| [[aggregator\|Aggregator]] | N | 1 | **Yes** | 関連メッセージを集約 |
+| [[resequencer\|Resequencer]] | N | N | **Yes** | 順序を復元 |
 
----
+## 4. トレードオフと制約 (Critical Thinking)
 
-### 変換系パターンの選択
+### Pros (利点):
+- 送信者と受信者の疎結合化
+- ルーティングロジックの一元管理
+- システムの拡張性向上
+- メッセージフローの可視化
 
+### Cons (欠点・副作用):
+- ルーターがボトルネックになる可能性
+- ステートフルなルーター（Aggregator, Resequencer）は複雑性とメモリ使用量が増加
+- メッセージの順序保証が難しくなる場合がある
+- デバッグ・トレースが困難になる可能性
+
+### Anti-Pattern:
+- 単純な1対1通信にルーターを導入（過剰設計）
+- 全てのメッセージを単一ルーター経由にする（ボトルネック化）
+
+## 5. パターン選択ガイド
+
+```mermaid
+flowchart TD
+    START[メッセージをどう処理したい？]
+
+    START --> Q1{振り分け先は？}
+    Q1 -->|単一| Q2{振り分け基準は？}
+    Q1 -->|複数| Q3{振り分け先の決定方法は？}
+    Q1 -->|分割/集約| Q4{どの操作？}
+
+    Q2 -->|内容に基づく| CBR2[Content-Based Router]
+    Q2 -->|動的ルール| DR2[Dynamic Router]
+    Q2 -->|条件で破棄| MF2[Message Filter]
+
+    Q3 -->|メッセージ内容から計算| RL2[Recipient List]
+    Q3 -->|全員に放送| PS[Publish-Subscribe Channel]
+
+    Q4 -->|1→N分割| SP2[Splitter]
+    Q4 -->|N→1集約| AG2[Aggregator]
+    Q4 -->|順序復元| RS2[Resequencer]
 ```
-メッセージを変換するには？
-│
-├─ 1つを複数に分割 → Splitter
-│
-├─ 複数を1つに集約 → Aggregator
-│
-└─ 順序を整理 → Resequencer
-```
 
-**使い分けのポイント:**
+### 複合パターンの組み合わせ
 
-| パターン | 入力 | 出力 | 典型的な用途 |
-|---------|------|------|------------|
-| **Splitter** | 1メッセージ | N メッセージ | 注文を品目ごとに分割 |
-| **Aggregator** | N メッセージ | 1メッセージ | 複数見積を1つの結果に集約 |
-| **Resequencer** | N メッセージ | N メッセージ（順序整理） | 並列処理後の順序復元 |
+| 組み合わせ | 名称 | 用途 |
+|-----------|------|------|
+| Recipient List + Aggregator | Scatter-Gather | 複数に問い合わせ→結果集約 |
+| Splitter + Router + Aggregator | Composed Message Processor | 複合メッセージの並列処理 |
+| 固定ステップの連鎖 | Routing Slip | 線形ワークフロー |
+| 動的ステップの制御 | Process Manager | 複雑なビジネスプロセス |
 
----
+## 6. リンクと関係性 (Network Knowledge)
 
-### フロー系パターンの選択
+### 関連パターン:
+- [[pipes_and_filters|Pipes and Filters]] - ルーターを接続するアーキテクチャスタイル
+- [[message_channel|Message Channel]] - ルーターを接続するパイプ
+- [[message_broker|Message Broker]] - ルーターを統合するハブ
 
-```
-処理フローは？
-│
-├─ 固定ステップ（順番が決まっている）
-│  └─ Routing Slip
-│     例: 顧客登録 → 連絡先記録 → サービスプラン選択 → 与信チェック
-│
-└─ 動的ステップ（条件分岐・並列処理あり）
-   └─ Process Manager
-      例: 与信スコア確認 → スコアに応じて分岐 → 承認 or 拒否
-```
+### 構成要素:
+- [[message|Message]] - ルーティング対象のデータ
+- [[message_endpoint|Message Endpoint]] - メッセージの送受信点
 
-**Routing Slip vs Process Manager:**
-
-| 観点 | Routing Slip | Process Manager |
-|------|-------------|----------------|
-| **ステップ順序** | 固定・線形 | 動的・非線形 |
-| **条件分岐** | ❌ 不可 | ✅ 可能 |
-| **ループ** | ❌ 不可 | ✅ 可能 |
-| **並列処理** | ❌ 不可 | ✅ 可能 |
-| **実装複雑度** | 低 | 高 |
-| **適用例** | 画像処理パイプライン | ローン審査プロセス |
-
-**選択基準:**
-- ステップが事前に決まっていて順番が変わらない → **Routing Slip**
-- ステップが実行時の結果に応じて変わる → **Process Manager**
-- ステップを並列実行する必要がある → **Process Manager**
-
----
-
-### 複合パターン（組み合わせ）
-
-実際のシステムでは複数パターンを組み合わせることが多い：
-
-**よくある組み合わせ:**
-
-1. **Recipient List + Aggregator = Scatter-Gather**
-   - 複数の宛先に送信し、結果を集約
-   - 例: 複数業者に見積依頼して最安値を選択
-
-2. **Splitter + Content-Based Router + Aggregator**
-   - メッセージ分割 → 各部分を適切な処理系に振り分け → 結果集約
-   - 例: 複合注文を商品カテゴリ別に分割処理
-
-3. **Process Manager + Aggregator**
-   - 複雑なフロー制御 + 結果集約
-   - 例: 並列の与信チェックと在庫確認を実行後、結果を統合
-
----
-
-### クイックリファレンス
-
-**こんな時はこのパターン:**
-
-| やりたいこと | パターン |
-|------------|---------|
-| 注文タイプ別に処理を振り分けたい | Content-Based Router |
-| 無効なメッセージを除外したい | Message Filter |
-| 複数業者に見積依頼したい | Recipient List |
-| 見積結果をまとめたい | Aggregator |
-| 注文を品目別に分けたい | Splitter |
-| 顧客登録の固定手順を実行したい | Routing Slip |
-| スコアに応じて審査フローを変えたい | Process Manager |
-| メッセージの順序を保証したい | Resequencer |
+### 次のステップ:
+- [[content_based_router|Content-Based Router]] - 最も基本的なルーティングパターン
+- [[pipes_and_filters|Pipes and Filters]] - 全体アーキテクチャの理解

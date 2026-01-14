@@ -1,308 +1,225 @@
 # Splitter
 
-## 概念図
+## 1. 3行要約 (Feynman Technique)
+> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
+- 「宅配便の仕分け」のような役割。複数の荷物が入った大きな箱を開けて、個別の荷物に分けて配送先ごとに振り分ける
+- 複合メッセージ（例：複数の注文アイテムを含む注文）を個別のメッセージに分割
+- 核心的価値：**複合メッセージの要素ごとの個別処理を可能にする**
 
-```
-         ┌─────────────────────────────────────────┐
-         │              Splitter                   │
-         │                                         │
-         │    ┌─────┐      ┌─────┐                │
-         │    │     │      │     │────────────────┼───▶ Part A
-         │    │ 複合 │      │     │                │
-    ────▶│───▶│ MSG │─────▶│ ──▶ │────────────────┼───▶ Part B
-         │    │     │      │     │                │
-         │    │     │      │     │────────────────┼───▶ Part C
-         │    └─────┘      └─────┘                │
-         │                                         │
-         └─────────────────────────────────────────┘
-```
+## 2. 解決する課題 (Context & Problem)
+> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
 
----
+- **Before:**
+  - 複合メッセージ（例：複数の行項目を含む顧客注文）を処理する必要がある
+  - 各要素が異なる方法で処理される必要がある
+  - 例：注文内の商品タイプによって、異なる在庫システムで検証が必要
 
-## 定義
+- **Trigger:**
+  - 複数要素を含むメッセージを処理する際、各要素を個別に扱いたい
+  - 各要素を並列処理したい
+  - 各要素を異なるシステムに送信したい
 
-Splitterは、大きな複合メッセージを個別のパーツに分離し、それぞれを小さなメッセージとして送信する必要がある場合に使用するパターンである。
+## 3. ソリューションと構造 (Structure & Visual)
+> **目的:** Dual Coding（文字と図）により記憶定着を図る。
 
----
+### 仕組み
+Splitterを使用して複合メッセージを個別メッセージの系列に分割する。
+- 元のメッセージから各要素ごとに個別のメッセージを発行
+- 各メッセージは適切な処理先にルーティング可能
 
-## Content-Based Router との比較
+### 構造図
 
-| パターン | 関心事 |
-|---------|-------|
-| **Splitter** | 単一の複合メッセージの個別パーツを別々のサブシステムにルーティング |
-| **Content-Based Router** | メッセージ全体を包括的なメッセージタイプに基づいて特定のサブシステムにルーティング |
+```mermaid
+graph LR
+    subgraph "Splitter Pattern"
+        ORDER[複合メッセージ<br/>Item A, B, C] --> SP{Splitter}
+        SP --> MSG_A[Message A]
+        SP --> MSG_B[Message B]
+        SP --> MSG_C[Message C]
+    end
 
-Splitterは、パーツのルーティング方法を決定するのがメッセージのパーツ内容であるため、Content-Based Router (228) に似ていると考えられるかもしれない。しかし、Content-Based Routerは主に包括的なメッセージタイプに基づいてメッセージ全体を特定のサブシステムにルーティングすることに関心がある。一方、Splitterは単一の複合メッセージの個別パーツを別々のサブシステムにルーティングすることに関心がある。
+    MSG_A --> PROC_A[Processor A]
+    MSG_B --> PROC_B[Processor B]
+    MSG_C --> PROC_C[Processor C]
 
----
-
-## 具体例：注文の分割
-
-`OrderPlaced`メッセージを個別の`Type[?]ItemOrdered`メッセージに分割する例を示す。
-
-### システム構成図
-
-```
-                                    ┌────────────────────────┐
-                                    │ OrderItemTypeAProcessor│
-                              ┌────▶│                        │
-                              │     │ TypeAItemOrdered       │
-                              │     └────────────────────────┘
-┌──────────────┐              │
-│  OrderPlaced │              │     ┌────────────────────────┐
-│  ┌─────────┐ │   ┌────────┐ │     │ OrderItemTypeBProcessor│
-│  │ TypeA   │ │   │        │ ├────▶│                        │
-│  │ TypeB   │ │──▶│ Order  │─┤     │ TypeBItemOrdered       │
-│  │ TypeC   │ │   │ Router │ │     └────────────────────────┘
-│  └─────────┘ │   │        │ │
-└──────────────┘   └────────┘ │     ┌────────────────────────┐
-                              │     │ OrderItemTypeCProcessor│
-                              └────▶│                        │
-                                    │ TypeCItemOrdered       │
-                                    └────────────────────────┘
+    style SP fill:#ffcc80
 ```
 
----
+### 処理フロー
 
-## 実装例（Scala/Akka）
+```mermaid
+sequenceDiagram
+    participant Sender as 送信者
+    participant SP as Splitter
+    participant PA as Processor A
+    participant PB as Processor B
+    participant PC as Processor C
 
-### メッセージ定義
+    Sender->>SP: Order(items=[A,B,C])
+    Note over SP: 各itemを個別メッセージに分割
+    SP->>PA: ItemOrdered(A)
+    SP->>PB: ItemOrdered(B)
+    SP->>PC: ItemOrdered(C)
+```
+
+## 4. トレードオフと制約 (Critical Thinking)
+
+### Pros (利点):
+- **並列処理**: 各要素を独立して並列処理可能
+- **柔軟なルーティング**: 各要素を異なるシステムに送信可能
+- **スケーラビリティ**: 要素ごとに処理をスケール可能
+- **責務分離**: 各プロセッサは特定の要素タイプのみ処理
+
+### Cons (欠点・副作用):
+- **メッセージ増幅**: 1つのメッセージがN個に増加
+- **順序喪失**: 分割後の処理順序が保証されない
+- **集約の必要性**: 結果を統合する場合、Aggregatorが必要
+- **トランザクション境界**: 元のメッセージの原子性が失われる
+
+### Anti-Pattern:
+- 分割後の結果集約を考慮しない
+- 元のメッセージとの相関識別子（Correlation ID）を付与しない
+- 単一要素のメッセージに対してSplitterを使用
+
+## 5. 実装イメージ (Implementation)
+
+### Akka Typed Actor (Scala)
 
 ```scala
-package co.vaughnvernon.reactiveenterprise.splitter
+import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.scaladsl.Behaviors
 
-import scala.collection.Map
-import akka.actor._
-import co.vaughnvernon.reactiveenterprise._
+// ドメインモデル
+case class Order(orderId: String, items: Seq[OrderItem])
+case class OrderItem(itemId: String, itemType: String, quantity: Int)
 
-// 注文アイテム
-case class OrderItem(
-        id: String,
-        itemType: String,
-        description: String,
-        price: Money) {
-  override def toString = {
-    s"OrderItem($id, $itemType, '$description', $price)"
-  }
-}
+// 分割後のメッセージ（Correlation ID付き）
+case class SplitOrderItem(
+  correlationId: String,  // 元のorderIdを保持
+  sequenceNumber: Int,    // 分割されたメッセージの順序
+  totalItems: Int,        // 分割総数
+  item: OrderItem
+)
 
-// 注文（複合メッセージ）
-case class Order(orderItems: Map[String, OrderItem]) {
-  val grandTotal: Double =
-        orderItems.values.map(_.price).sum
+// Splitter
+object OrderSplitter {
+  sealed trait Command
+  case class Split(order: Order) extends Command
 
-  override def toString = {
-    s"Order(Order Items: $orderItems Totaling:↩
-    $grandTotal)"
-  }
-}
+  def apply(
+    itemProcessor: ActorRef[SplitOrderItem]
+  ): Behavior[Command] =
+    Behaviors.receive { (context, command) =>
+      command match {
+        case Split(order) =>
+          context.log.info(s"Splitting order ${order.orderId} into ${order.items.size} items")
 
-// 注文確定メッセージ（複合メッセージ）
-case class OrderPlaced(order: Order)
-
-// 分割後のメッセージ
-case class TypeAItemOrdered(orderItem: OrderItem)
-case class TypeBItemOrdered(orderItem: OrderItem)
-case class TypeCItemOrdered(orderItem: OrderItem)
-```
-
-### ドライバアプリケーション
-
-```scala
-object Splitter extends CompletableApp(4) {
-  val orderRouter =
-          system.actorOf(
-            Props[OrderRouter],
-            "orderRouter")
-
-  // 異なるタイプのアイテムを含む注文を作成
-  val orderItem1 = OrderItem("1", "TypeA",
-                    "An item of type A.", 23.95)
-  val orderItem2 = OrderItem("2", "TypeB",
-                    "An item of type B.", 99.95)
-  val orderItem3 = OrderItem("3", "TypeC",
-                    "An item of type C.", 14.95)
-
-  val orderItems = Map(
-      orderItem1.itemType -> orderItem1,
-      orderItem2.itemType -> orderItem2,
-      orderItem3.itemType -> orderItem3)
-
-  // 複合メッセージを送信
-  orderRouter ! OrderPlaced(Order(orderItems))
-
-  awaitCompletion
-  println("Splitter: is completed.")
-}
-```
-
----
-
-## OrderRouter（Splitter実装）
-
-```scala
-class OrderRouter extends Actor {
-  // タイプ別プロセッサの作成
-  val orderItemTypeAProcessor = context.actorOf(
-            Props[OrderItemTypeAProcessor],
-            "orderItemTypeAProcessor")
-  val orderItemTypeBProcessor = context.actorOf(
-            Props[OrderItemTypeBProcessor],
-            "orderItemTypeBProcessor")
-  val orderItemTypeCProcessor = context.actorOf(
-            Props[OrderItemTypeCProcessor],
-            "orderItemTypeCProcessor")
-
-  def receive = {
-    case OrderPlaced(order) =>
-      println(order)
-
-      // 各アイテムを走査して分割・ルーティング
-      order.orderItems foreach {
-        case (itemType, orderItem) => itemType match {
-          case "TypeA" =>
-            println(s"OrderRouter: routing $itemType")
-            orderItemTypeAProcessor !
-                      TypeAItemOrdered(orderItem)
-          case "TypeB" =>
-            println(s"OrderRouter: routing $itemType")
-            orderItemTypeBProcessor !
-                      TypeBItemOrdered(orderItem)
-          case "TypeC" =>
-            println(s"OrderRouter: routing $itemType")
-            orderItemTypeCProcessor !
-                      TypeCItemOrdered(orderItem)
-        }
+          // 各アイテムを個別メッセージとして発行
+          order.items.zipWithIndex.foreach { case (item, index) =>
+            val splitItem = SplitOrderItem(
+              correlationId = order.orderId,
+              sequenceNumber = index + 1,
+              totalItems = order.items.size,
+              item = item
+            )
+            context.log.info(s"Split item: ${item.itemId}")
+            itemProcessor ! splitItem
+          }
+          Behaviors.same
       }
+    }
+}
 
-      Splitter.completedStep()
+// Content-Based Router と組み合わせた Splitter
+object SplitterWithRouter {
+  sealed trait Command
+  case class Split(order: Order) extends Command
 
-    case _ =>
-      println("OrderRouter: received unexpected message")
-  }
+  def apply(
+    typeAProcessor: ActorRef[SplitOrderItem],
+    typeBProcessor: ActorRef[SplitOrderItem],
+    defaultProcessor: ActorRef[SplitOrderItem]
+  ): Behavior[Command] =
+    Behaviors.receive { (context, command) =>
+      command match {
+        case Split(order) =>
+          order.items.zipWithIndex.foreach { case (item, index) =>
+            val splitItem = SplitOrderItem(
+              correlationId = order.orderId,
+              sequenceNumber = index + 1,
+              totalItems = order.items.size,
+              item = item
+            )
+
+            // 分割後に Content-Based Routing
+            val destination = item.itemType match {
+              case "TypeA" => typeAProcessor
+              case "TypeB" => typeBProcessor
+              case _       => defaultProcessor
+            }
+
+            context.log.info(
+              s"Routing ${item.itemId} (${item.itemType}) to ${destination.path.name}"
+            )
+            destination ! splitItem
+          }
+          Behaviors.same
+      }
+    }
+}
+
+// アイテムプロセッサ
+object ItemProcessor {
+  def apply(name: String): Behavior[SplitOrderItem] =
+    Behaviors.receive { (context, splitItem) =>
+      context.log.info(
+        s"$name processing: ${splitItem.item.itemId} " +
+        s"(${splitItem.sequenceNumber}/${splitItem.totalItems})"
+      )
+      Behaviors.same
+    }
+}
+
+// 使用例
+object SplitterExample {
+  def apply(): Behavior[Nothing] =
+    Behaviors.setup[Nothing] { context =>
+      val typeAProcessor = context.spawn(ItemProcessor("TypeA"), "typeAProcessor")
+      val typeBProcessor = context.spawn(ItemProcessor("TypeB"), "typeBProcessor")
+      val defaultProcessor = context.spawn(ItemProcessor("Default"), "defaultProcessor")
+
+      val splitter = context.spawn(
+        SplitterWithRouter(typeAProcessor, typeBProcessor, defaultProcessor),
+        "splitter"
+      )
+
+      splitter ! SplitterWithRouter.Split(Order(
+        "ORD-001",
+        Seq(
+          OrderItem("item1", "TypeA", 2),
+          OrderItem("item2", "TypeB", 1),
+          OrderItem("item3", "TypeA", 3)
+        )
+      ))
+
+      Behaviors.empty
+    }
 }
 ```
 
----
+## 6. リンクと関係性 (Network Knowledge)
 
-## タイプ別プロセッサ
+### 関連パターン:
+- [[aggregator|Aggregator]] (補完: 分割された結果を再統合)
+- [[content_based_router|Content-Based Router]] (組み合わせ: 分割後のルーティング)
+- [[composed_message_processor|Composed Message Processor]] (組み合わせ: Splitter + Router + Aggregator)
+- [[resequencer|Resequencer]] (補完: 分割後の順序復元)
+- [[correlation_identifier|Correlation Identifier]] - 分割メッセージの関連付け
 
-### OrderItemTypeAProcessor
+### 構成要素:
+- [[message_channel|Message Channel]] - 出力チャネル
+- [[message|Message]] - 分割後の個別メッセージ
 
-```scala
-class OrderItemTypeAProcessor extends Actor {
-  def receive = {
-    case TypeAItemOrdered(orderItem) =>
-      println(s"OrderItemTypeAProcessor: handling↩
-      $orderItem")
-      Splitter.completedStep()
-    case _ =>
-      println("OrderItemTypeAProcessor: unexpected")
-  }
-}
-```
-
-### OrderItemTypeBProcessor
-
-```scala
-class OrderItemTypeBProcessor extends Actor {
-  def receive = {
-    case TypeBItemOrdered(orderItem) =>
-      println(s"OrderItemTypeBProcessor: handling↩
-      $orderItem")
-      Splitter.completedStep()
-    case _ =>
-      println("OrderItemTypeBProcessor: unexpected")
-  }
-}
-```
-
-### OrderItemTypeCProcessor
-
-```scala
-class OrderItemTypeCProcessor extends Actor {
-  def receive = {
-    case TypeCItemOrdered(orderItem) =>
-      println(s"OrderItemTypeCProcessor: handling↩
-      $orderItem")
-      Splitter.completedStep()
-    case _ =>
-      println("OrderItemTypeCProcessor: unexpected")
-  }
-}
-```
-
----
-
-## 処理フロー図
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Splitter 処理フロー                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  OrderPlaced(Order) 受信                                        │
-│         │                                                       │
-│         ▼                                                       │
-│  ┌─────────────────────────────────────┐                        │
-│  │  order.orderItems foreach {         │                        │
-│  │    case (itemType, orderItem) =>    │                        │
-│  │      itemType match { ... }         │                        │
-│  │  }                                  │                        │
-│  └───────────────┬─────────────────────┘                        │
-│                  │                                              │
-│         ┌────────┼────────┐                                     │
-│         │        │        │                                     │
-│         ▼        ▼        ▼                                     │
-│      "TypeA"  "TypeB"  "TypeC"                                  │
-│         │        │        │                                     │
-│         ▼        ▼        ▼                                     │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐                         │
-│  │ TypeA    │ │ TypeB    │ │ TypeC    │                         │
-│  │ Item     │ │ Item     │ │ Item     │                         │
-│  │ Ordered  │ │ Ordered  │ │ Ordered  │                         │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘                         │
-│       │            │            │                               │
-│       ▼            ▼            ▼                               │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐                         │
-│  │ TypeA    │ │ TypeB    │ │ TypeC    │                         │
-│  │ Processor│ │ Processor│ │ Processor│                         │
-│  └──────────┘ └──────────┘ └──────────┘                         │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 実行結果
-
-```
-Order(Order Items: Map(TypeA -> OrderItem(1,↩
- TypeA, 'An item of type A.', 23.95), TypeB ->↩
- OrderItem(2, TypeB, 'An item of type B.', 99.95),↩
- TypeC -> OrderItem(3, TypeC, 'An item of type C.',↩
- 14.95)) Totaling: 138.85)
-OrderRouter: routing TypeA
-OrderRouter: routing TypeB
-OrderRouter: routing TypeC
-OrderItemTypeAProcessor: handling OrderItem(1, TypeA,↩
- 'An item of type A.', 23.95)
-OrderItemTypeBProcessor: handling OrderItem(2, TypeB,↩
- 'An item of type B.', 99.95)
-OrderItemTypeCProcessor: handling OrderItem(3, TypeC,↩
- 'An item of type C.', 14.95)
-Splitter: is completed.
-```
-
----
-
-## 動作の説明
-
-サンプルの`Order`には3つの`OrderItem`インスタンスがあり、それぞれ異なるタイプを持つ。
-
-`OrderRouter`が`OrderPlaced`メッセージを受信すると：
-1. 各`OrderItem`インスタンスを走査（イテレート）する
-2. `OrderItem`の`itemType`の値に基づいて、`OrderItem`を新しいメッセージにパッケージ化する
-3. 特定のタイププロセッサにディスパッチする
-
-これにより、単一の複合メッセージ（`OrderPlaced`）が複数の個別メッセージ（`TypeAItemOrdered`、`TypeBItemOrdered`、`TypeCItemOrdered`）に分割され、それぞれが適切なプロセッサで処理される。
+### 次のステップ:
+- [[aggregator|Aggregator]] - 分割後の結果を集約する場合
+- [[composed_message_processor|Composed Message Processor]] - 分割→処理→集約の完全なパターン

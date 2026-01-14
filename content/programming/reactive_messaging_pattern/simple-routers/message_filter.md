@@ -1,376 +1,192 @@
 # Message Filter
 
-## 概念図
+## 1. 3行要約 (Feynman Technique)
+> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
+- 「選別するザル」のような役割。条件に合うメッセージだけを通過させ、それ以外は捨てる
+- Content-Based Routerの特殊形で、出力チャネルが1つしかない（通過 or 破棄）
+- 核心的価値：**不要なメッセージの除外**
 
-```
-         ┌─────────────────────────────────┐
-         │        Message Filter           │
-         │                                 │
-         │           ┌─────┐               │
-         │           │ ▼   │               │
-         │           │ フィ │               │
-         │           │ ル  │               │
-         │           │ タ  │               │
-         │           │ ー  │               │
-         │           └──┬──┘               │
-         │              │                  │
-         └──────────────┼──────────────────┘
-                        ▼
-                  不要メッセージを
-                     破棄
-```
+## 2. 解決する課題 (Context & Problem)
+> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
 
----
+- **Before:**
+  - Publish-Subscribe Channelで全メッセージを受信するが、関心があるのは一部のみ
+  - 例：ウィジェットにのみ関心のある顧客が、ガジェットの価格変更通知も受け取ってしまう
+  - 不要なメッセージの処理にリソースが浪費される
 
-## 定義
+- **Trigger:**
+  - 顧客が受け取りたくないメッセージを避けたい
+  - 特定の条件に合致するメッセージのみを処理したい
+  - 下流のシステムに不要なメッセージを流したくない
 
-Message Filterは、システムが関心のないメッセージや互換性のないメッセージを受信する可能性がある場合に、それらの不要なメッセージを破棄するために使用するパターンである。
+## 3. ソリューションと構造 (Structure & Visual)
+> **目的:** Dual Coding（文字と図）により記憶定着を図る。
 
----
+### 仕組み
+特殊なMessage Routerである Message Filter を使用して、条件セットに基づいてチャネルから不要なメッセージを除去する。
 
-## Content-Based Router との比較
+- 単一の出力チャネルを持つ
+- メッセージ内容が基準と一致すれば出力チャネルにルーティング
+- 一致しなければメッセージは破棄される
 
-| 観点 | Content-Based Router | Message Filter |
-|-----|---------------------|----------------|
-| **配置場所** | 送信システム側またはハブ | 受信システム側（ターゲットシステム） |
-| **動作** | メッセージタイプに基づいて特定システムにルーティング | 処理目標と互換性のないメッセージを除外 |
-| **知識** | 送信側がルーティング先を把握 | 受信側は送信側の知識がない、または古い知識しかない |
-| **結果** | ターゲットシステムに互換性のないメッセージは届かない | 互換性のあるメッセージのみコア処理に転送 |
+### 構造図
 
-### Content-Based Router の特徴
-- 特定システムが特定メッセージタイプをサポートする場合、そのタイプのメッセージはそのシステムにルーティングされる
-- ルーターは送信システムの一部として配置されるか、実際の宛先システムへのプロキシとして機能するハブとして存在する
-- Content-Based Routerを使用する場合、ターゲットシステムに処理目標と互換性のないメッセージが送信されることはない
+```mermaid
+graph LR
+    subgraph "Message Filter"
+        IN[入力チャネル] --> MF{Message<br/>Filter}
+        MF -->|条件一致| OUT[出力チャネル]
+        MF -.->|条件不一致| DISCARD((破棄))
+    end
 
-### Message Filter の特徴
-- 受信システムが処理目標と互換性のないメッセージを受け取る可能性がある（送信システムが知識を持たない、または古い知識しか持たないため）
-- ターゲットシステムはコアビジネスプロセスを実行する前に、互換性のないメッセージをフィルタリングする必要がある
-- Message Filterはターゲットシステムに見えるが、実際にはコア処理を管理するアクターへのプロキシに過ぎない
-
----
-
-## 具体例：注文システム
-
-Content-Based Router (228) で議論した `OrderPlaced` イベントを `InventorySystemA` と `InventorySystemX` に送信するケースを考える。
-
-### Message Filter例の設定
-Content-Based Routerとは異なり、特定のメッセージタイプを特定の在庫システムにルーティングするのではなく、`"TypeABC"` と `"TypeXYZ"` の両方の注文を `InventorySystemA` と `InventorySystemX` の**両方**に送信する。
-
-### システム構成図
-
-```
-┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
-│ OrderPlaced │ │ OrderPlaced │ │ OrderPlaced │ │ OrderPlaced │
-│   TypeABC   │ │   TypeABC   │ │   TypeXYZ   │ │   TypeABC   │
-│   ┌───┐     │ │   ┌───┐     │ │   ┌───┐     │ │   ┌───┐     │
-│   │ ⚡│     │ │   │ ⚡│     │ │   │ ⚡│     │ │   │ ⚡│     │
-│   └───┘     │ │   └───┘     │ │   └───┘     │ │   └───┘     │
-└──────┬──────┘ └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
-       │               │               │               │
-       └───────────────┴───────┬───────┴───────────────┘
-                               │
-                               ▼
-                    ┌─────────────────────┐
-                    │    OrderFilter      │
-                    │      ┌─────┐        │
-                    │      │  ▼  │        │
-                    │      └──┬──┘        │
-                    └─────────┼───────────┘
-                              │
-               ┌──────────────┴──────────────┐
-               │                             │
-               ▼                             ▼
-    ┌─────────────────────┐       ┌─────────────────────┐
-    │  InventorySystemA   │       │  InventorySystemA   │
-    │     ┌───┬───┐       │       │     ┌───┬───┐       │
-    │     │ ⚡│ ⚡│       │       │     │ ⚡│ ⚡│       │
-    │     └───┴───┘       │       │     └───┴───┘       │
-    └─────────────────────┘       └─────────────────────┘
-
-    ※ 各在庫システムが自身でフィルタリングを行う
-    ※ TypeABC → InventorySystemA が処理
-    ※ TypeXYZ → InventorySystemX が処理
-    ※ 互換性のないタイプは各システムで破棄
+    style MF fill:#ffcc80
+    style DISCARD fill:#ffcdd2
 ```
 
----
+### 処理フロー
 
-## 実装例（Scala/Akka）
+```mermaid
+sequenceDiagram
+    participant IN as 入力チャネル
+    participant MF as Message Filter
+    participant OUT as 出力チャネル
 
-### ドライバアプリケーション
+    IN->>MF: Message(type=Widget)
+    Note over MF: Widget? ✓
+    MF->>OUT: Message(type=Widget)
+
+    IN->>MF: Message(type=Gadget)
+    Note over MF: Widget? ✗
+    Note over MF: 破棄
+```
+
+## 4. トレードオフと制約 (Critical Thinking)
+
+### Pros (利点):
+- **シンプル**: 単一条件で通過/破棄を決定
+- **リソース節約**: 不要なメッセージの処理を回避
+- **下流保護**: 下流システムに不要なメッセージが流れない
+- **選択的購読**: Pub/Subパターンと組み合わせて選択的受信を実現
+
+### Cons (欠点・副作用):
+- **メッセージ損失**: 破棄されたメッセージは復元不可
+- **監査困難**: 破棄されたメッセージの追跡が難しい
+- **設定ミスのリスク**: 誤った条件設定で必要なメッセージが破棄される
+- **デバッグ困難**: 「なぜメッセージが届かないか」の原因特定が難しい
+
+### Anti-Pattern:
+- 破棄理由のログを残さない
+- 複雑なビジネスロジックをフィルターに入れる
+- 本来はContent-Based Routerを使うべき場面でMessage Filterを使う
+
+## 5. 実装イメージ (Implementation)
+
+### Akka Typed Actor (Scala)
 
 ```scala
-object MessageFilter extends CompletableApp (4) {
-  // InventorySystemA（フィルタ内蔵型）
-  val inventorySystemA =
-          system.actorOf(
-            Props[InventorySystemA],
-            "inventorySystemA")
+import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.scaladsl.Behaviors
 
-  // 実際のInventorySystemX
-  val actualInventorySystemX =
-          system.actorOf(
-            Props[InventorySystemX],
-            "inventorySystemX")
+// メッセージ定義
+sealed trait PriceUpdate
+case class WidgetPriceUpdate(productId: String, price: Double) extends PriceUpdate
+case class GadgetPriceUpdate(productId: String, price: Double) extends PriceUpdate
 
-  // InventorySystemX用のMessage Filter（別アクター）
-  val inventorySystemX =
-      system.actorOf(
-          Props(classOf[InventorySystemXMessageFilter],
-              actualInventorySystemX),
-          "inventorySystemXMessageFilter")
+// Message Filter
+object MessageFilter {
+  def apply[T](
+    predicate: T => Boolean,
+    output: ActorRef[T],
+    onDiscard: Option[T => Unit] = None
+  ): Behavior[T] =
+    Behaviors.receive { (context, message) =>
+      if (predicate(message)) {
+        context.log.info(s"Message passed filter: $message")
+        output ! message
+      } else {
+        context.log.info(s"Message discarded: $message")
+        onDiscard.foreach(_(message))
+      }
+      Behaviors.same
+    }
+}
 
-  // TypeABC の注文アイテム
-  val orderItem1 = OrderItem("1", "TypeABC.4",
-                    "An item of type ABC.4.", 29.95)
-  val orderItem2 = OrderItem("2", "TypeABC.1",
-                    "An item of type ABC.1.", 99.95)
-  val orderItem3 = OrderItem("3", "TypeABC.9",
-                    "An item of type ABC.9.", 14.95)
+// Widget専用フィルター
+object WidgetFilter {
+  def apply(output: ActorRef[PriceUpdate]): Behavior[PriceUpdate] =
+    Behaviors.receive { (context, message) =>
+      message match {
+        case w: WidgetPriceUpdate =>
+          context.log.info(s"Widget price update passed: ${w.productId}")
+          output ! w
+        case _ =>
+          context.log.debug(s"Non-widget message discarded")
+      }
+      Behaviors.same
+    }
+}
 
-  val orderItemsOfTypeA = Map(
-          orderItem1.itemType -> orderItem1,
-          orderItem2.itemType -> orderItem2,
-          orderItem3.itemType -> orderItem3)
+// 型安全な汎用フィルター
+object TypedMessageFilter {
+  sealed trait Command[+T]
+  case class Filter[T](message: T) extends Command[T]
 
-  // TypeABC注文を両方の在庫システムに送信
-  inventorySystemA ! OrderPlaced(Order("123", "TypeABC",
-                          orderItemsOfTypeA))
-  inventorySystemX ! OrderPlaced(Order("123", "TypeABC",
-                          orderItemsOfTypeA))
+  def apply[T, U <: T](
+    output: ActorRef[U]
+  )(implicit ev: scala.reflect.ClassTag[U]): Behavior[Command[T]] =
+    Behaviors.receive { (context, command) =>
+      command match {
+        case Filter(message) =>
+          message match {
+            case u: U =>
+              context.log.info(s"Message matched type filter")
+              output ! u
+            case _ =>
+              context.log.debug(s"Message did not match type filter")
+          }
+          Behaviors.same
+      }
+    }
+}
 
-  // TypeXYZ の注文アイテム
-  val orderItem4 = OrderItem("4", "TypeXYZ.2",
-                    "An item of type XYZ.2.", 74.95)
-  val orderItem5 = OrderItem("5", "TypeXYZ.1",
-                    "An item of type XYZ.1.", 59.95)
-  val orderItem6 = OrderItem("6", "TypeXYZ.7",
-                    "An item of type XYZ.7.", 29.95)
-  val orderItem7 = OrderItem("7", "TypeXYZ.5",
-                    "An item of type XYZ.5.", 9.95)
+// 使用例
+object FilterExample {
+  def apply(): Behavior[Nothing] =
+    Behaviors.setup[Nothing] { context =>
+      val widgetProcessor = context.spawn(
+        Behaviors.receiveMessage[PriceUpdate] { msg =>
+          println(s"Processing widget: $msg")
+          Behaviors.same
+        },
+        "widgetProcessor"
+      )
 
-  val orderItemsOfTypeX = Map(
-          orderItem4.itemType -> orderItem4,
-          orderItem5.itemType -> orderItem5,
-          orderItem6.itemType -> orderItem6,
-          orderItem7.itemType -> orderItem7)
+      val filter = context.spawn(
+        WidgetFilter(widgetProcessor),
+        "widgetFilter"
+      )
 
-  // TypeXYZ注文を両方の在庫システムに送信
-  inventorySystemA ! OrderPlaced(Order("124", "TypeXYZ",
-              orderItemsOfTypeX))
-  inventorySystemX ! OrderPlaced(Order("124", "TypeXYZ",
-              orderItemsOfTypeX))
+      // WidgetのみがwidgetProcessorに届く
+      filter ! WidgetPriceUpdate("W001", 29.99)  // 通過
+      filter ! GadgetPriceUpdate("G001", 49.99)  // 破棄
 
-  awaitCompletion
-  println("MessageFilter: is completed.")
+      Behaviors.empty
+    }
 }
 ```
 
----
+## 6. リンクと関係性 (Network Knowledge)
 
-## 2つの実装アプローチ
+### 関連パターン:
+- [[content_based_router|Content-Based Router]] (汎化: Message Filterは出力が1つの特殊ケース)
+- [[message_router|Message Router]] (汎化: 親パターン)
+- [[selective_consumer|Selective Consumer]] (比較: 消費者側でフィルタリング)
+- [[recipient_list|Recipient List]] (比較: 複数宛先への送信)
 
-両方の在庫システムが両方のタイプのメッセージを受信するため、各システムがサポートしないメッセージタイプをフィルタリングする責任を持つ。各在庫システムは異なるアプローチを取る。
+### 構成要素:
+- [[message_channel|Message Channel]] - 入出力チャネル
+- [[publish_subscribe_channel|Publish-Subscribe Channel]] - 組み合わせて選択的購読を実現
 
-### アプローチ1：フィルタ内蔵型（InventorySystemA）
-
-アクターの `receive` ブロックの実装方法を利用して、Message Filterを `InventorySystemA` アクター自体に設計する。
-
-```scala
-class InventorySystemA extends Actor {
-  def receive = {
-    // ガード条件でTypeABCのみ処理
-    case OrderPlaced(order) if (order.isType("TypeABC")) =>
-      println(s"InventorySystemA: handling $order")
-      MessageFilter.completedStep()
-
-    // 互換性のない注文はフィルタリング
-    case incompatibleOrder =>
-      println(s"InventorySystemA: filtering out:↩
-      $incompatibleOrder")
-      MessageFilter.completedStep()
-  }
-}
-```
-
-### アプローチ2：別アクター型（InventorySystemX）
-
-Message Filterを別のアクターとして実装する。
-
-```scala
-// 実際の在庫システムX
-class InventorySystemX extends Actor {
-  def receive = {
-    case OrderPlaced(order) =>
-      println(s"InventorySystemX: handling $order")
-      MessageFilter.completedStep()
-    case _ =>
-      println("InventorySystemX: unexpected message")
-      MessageFilter.completedStep()
-  }
-}
-
-// InventorySystemX用のMessage Filter
-class InventorySystemXMessageFilter(
-          actualInventorySystemX: ActorRef)
-  extends Actor {
-  def receive = {
-    // TypeXYZのみ実際のシステムに転送
-    case orderPlaced: OrderPlaced
-        if (orderPlaced.order.isType("TypeXYZ")) =>
-      actualInventorySystemX forward orderPlaced
-      MessageFilter.completedStep()
-
-    // 互換性のない注文はフィルタリング
-    case incompatibleOrder =>
-      println(s"InventorySystemXMessageFilter: filtering:↩
-      $incompatibleOrder")
-      MessageFilter.completedStep()
-  }
-}
-```
-
-### ドライバから見た構成
-
-```scala
-object MessageFilter extends CompletableApp (4) {
-  ...
-  // 実際のInventorySystemX
-  val actualInventorySystemX =
-          system.actorOf(
-            Props[InventorySystemX],
-            "inventorySystemX")
-
-  // Message Filter（ドライバからはInventorySystemXとして参照）
-  val inventorySystemX =
-          system.actorOf(
-            Props(classOf[InventorySystemXMessageFilter],
-                actualInventorySystemX),
-            "inventorySystemXMessageFilter")
-  ...
-}
-```
-
-ドライバアプリケーションから見ると、`InventorySystemXMessageFilter` は `InventorySystemX` として参照される（`inventorySystemX` という名前で参照）。
-
-実際には、ドライバの `InventorySystemX` アクター参照が保持するMessage Filterは、システム互換のメッセージの転送とその他すべてのフィルタリングのみに関心を持つ。`"TypeXYZ"` の `Order` を含む `OrderPlaced` イベントを受信すると、Message Filterは `actualInventorySystemX` が参照するアクター（実際の在庫システムのエントリポイント）にイベントを転送する。
-
----
-
-## 処理フロー図
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│           アプローチ1: フィルタ内蔵型 (InventorySystemA)          │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  OrderPlaced 受信                                               │
-│        │                                                        │
-│        ▼                                                        │
-│  ┌──────────────────┐                                           │
-│  │ order.isType     │                                           │
-│  │  ("TypeABC") ?   │                                           │
-│  └────────┬─────────┘                                           │
-│      ┌────┴────┐                                                │
-│      │         │                                                │
-│     Yes        No                                               │
-│      │         │                                                │
-│      ▼         ▼                                                │
-│   処理実行   フィルタリング                                        │
-│              (破棄)                                              │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│           アプローチ2: 別アクター型 (InventorySystemX)            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │         InventorySystemXMessageFilter (プロキシ)          │   │
-│  │                                                          │   │
-│  │  OrderPlaced 受信                                        │   │
-│  │        │                                                 │   │
-│  │        ▼                                                 │   │
-│  │  ┌──────────────────┐                                    │   │
-│  │  │ order.isType     │                                    │   │
-│  │  │  ("TypeXYZ") ?   │                                    │   │
-│  │  └────────┬─────────┘                                    │   │
-│  │      ┌────┴────┐                                         │   │
-│  │      │         │                                         │   │
-│  │     Yes        No                                        │   │
-│  │      │         │                                         │   │
-│  │      ▼         ▼                                         │   │
-│  │   forward   フィルタリング                                 │   │
-│  │      │       (破棄)                                      │   │
-│  └──────┼───────────────────────────────────────────────────┘   │
-│         │                                                       │
-│         ▼                                                       │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              InventorySystemX (実際のシステム)             │   │
-│  │                                                          │   │
-│  │  OrderPlaced 受信 → 処理実行                              │   │
-│  │                                                          │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 実行結果
-
-```
-InventorySystemA: handling Order(123, TypeABC,↩
- Map(TypeABC.4 -> OrderItem(1, TypeABC.4, 'An item↩
- of type ABC.4.', 29.95), TypeABC.1 -> OrderItem(2,↩
-TypeABC.1, 'An item of type ABC.1.', 99.95),↩
-TypeABC.9 -> OrderItem(3, TypeABC.9, 'An item↩
- of type ABC.9.', 14.95)), Totaling: 144.85))
-
-InventorySystemXMessageFilter: filtering: OrderPlaced(↩
-Order(123, TypeABC, Map(TypeABC.4 -> OrderItem(1,↩
- TypeABC.4, 'An item of type ABC.4.', 29.95), TypeABC.1↩
- -> OrderItem(2, TypeABC.1, 'An item of type ABC.1.',↩
- 99.95), TypeABC.9 -> OrderItem(3, TypeABC.9, 'An item↩
- of type ABC.9.', 14.95)), Totaling: 144.85))
-
-InventorySystemA: filtering: OrderPlaced(Order(124,↩
- TypeXYZ, Map(TypeXYZ.2 -> OrderItem(4, TypeXYZ.2,↩
- 'An item of type XYZ.2.', 74.95), TypeXYZ.1 ->↩
-OrderItem(5, TypeXYZ.1, 'An item of type XYZ.1.',↩
- 59.95), TypeXYZ.7 -> OrderItem(6, TypeXYZ.7, 'An↩
- item of type XYZ.7.', 29.95), TypeXYZ.5 -> OrderItem(↩
-7, TypeXYZ.5, 'An item of type XYZ.5.', 9.95)), Totaling:↩
- 174.79999999999998))
-
-InventorySystemX: handling Order(124, TypeXYZ,↩
- Map(TypeXYZ.2 -> OrderItem(4, TypeXYZ.2, 'An item↩
- of type XYZ.2.', 74.95), TypeXYZ.1 -> OrderItem(5,↩
-TypeXYZ.1, 'An item of type XYZ.1.', 59.95), TypeXYZ.7↩
- -> OrderItem(6, TypeXYZ.7, 'An item of type XYZ.7.',↩
- 29.95), TypeXYZ.5 -> OrderItem(7, TypeXYZ.5, 'An item↩
- of type XYZ.5.', 9.95)), Totaling: 174.79999999999998)
-
-MessageFilter: is completed.
-```
-
----
-
-## 2つのアプローチの比較
-
-| 観点 | フィルタ内蔵型 (InventorySystemA) | 別アクター型 (InventorySystemX) |
-|-----|--------------------------------|-------------------------------|
-| **保守性** | 新しいメッセージタイプのサポート追加や既存タイプのサポート終了時にアクター変更が必要 | Message Filterを `InventorySystemX` 自体とは別に保守できる |
-| **オーバーヘッド** | 追加アクターなし | フィルタリング用の別アクター導入による若干のオーバーヘッド |
-| **アーキテクチャ** | シンプル | Pipes and Filters (135) アーキテクチャの強みを活用 |
-
-### 別アクター型の利点
-`InventorySystemXMessageFilter` を別に実装する主な利点は、`InventorySystemX` 自体とは別に保守できることである。対照的に、`InventorySystemA` アクターは新しいメッセージタイプがサポートされるたび、または以前サポートされていたメッセージタイプが互換性がなくなるたびに変更する必要がある。
-
-### 別アクター型の欠点
-`InventorySystemX` の設計の欠点は、フィルタリング用に別のアクターを導入することによる若干のオーバーヘッドがあることだが、オーバーヘッドは最小限である。
-
-### 推奨
-**Pipes and Filters** (135) アーキテクチャの強みを活かすため、`InventorySystemX` とその Message Filter のアーキテクチャを選択することが推奨される。
-
-
+### 次のステップ:
+- [[content_based_router|Content-Based Router]] - 破棄ではなく振り分けが必要な場合
+- [[recipient_list|Recipient List]] - 複数宛先への送信が必要な場合

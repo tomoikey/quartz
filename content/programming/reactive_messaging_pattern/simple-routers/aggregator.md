@@ -1,475 +1,266 @@
 # Aggregator
 
-## 概念図
+## 1. 3行要約 (Feynman Technique)
+> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
+- 「パズルを組み立てる人」のような役割。バラバラに届くピースを集めて、1つの完成した絵にする
+- 関連する複数のメッセージを収集し、完全なセットが揃ったら1つの統合メッセージを発行
+- 核心的価値：**分散した結果の統合と完了判定**
 
-```
-         ┌─────────────────────────────────────────┐
-         │              Aggregator                 │
-         │                                         │
-         │    ┌─────┐                              │
-    ────▶│───▶│     │      ┌─────┐                │
-         │    │     │      │     │                │
-    ────▶│───▶│     │─────▶│     │────────────────┼───▶
-         │    │     │      │     │                │
-    ────▶│───▶│     │      └─────┘                │
-         │    └─────┘                              │
-         │                                         │
-         └─────────────────────────────────────────┘
-```
+## 2. 解決する課題 (Context & Problem)
+> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
 
----
+- **Before:**
+  - 複数の見積エンジンに価格見積を依頼したが、応答がバラバラに届く
+  - 各応答をどの依頼に紐づけるか、全ての応答が揃ったかの判定が必要
+  - 例：最良価格を選択するには、全ての見積を比較する必要がある
 
-## 定義
+- **Trigger:**
+  - 個別だが関連する複数のメッセージの結果を1つに結合したい
+  - 全ての関連メッセージが揃ったことを検知したい
+  - Splitter/Recipient Listで分散した処理の結果を統合したい
 
-Aggregatorは、複数の個別メッセージを収集し、それらを単一の統合されたメッセージに結合するパターンである。
+## 3. ソリューションと構造 (Structure & Visual)
+> **目的:** Dual Coding（文字と図）により記憶定着を図る。
 
----
+### 仕組み
+ステートフルなフィルターであるAggregatorを使用して、関連する個別メッセージを収集・保存し、完全なセットが揃ったら単一の集約メッセージを発行する。
 
-## Correlation Identifier との関係
+### 設計の3要素
 
-Recipient List (245) の例では、`PriceQuote`応答が`MountaineeringSuppliesOrderProcessor`によってどのように同化されるかを示していなかった。`PriceQuote`応答を元の`RequestForQuotation`に関連付けるには、各メッセージと共に渡された一意の`rfqId`（**Correlation Identifier (215)**）を使用する必要がある。
+| 要素 | 説明 |
+|-----|------|
+| **相関性 (Correlation)** | どのメッセージが関連しているか（Correlation Identifier） |
+| **完全性条件 (Completeness)** | いつ結果を発行するか（終了条件） |
+| **集約アルゴリズム** | メッセージをどう結合するか |
 
-```scala
-// リクエスト送信時
-orderProcessor ! RequestForQuotation("123", ...)
-...
-// 見積エンジンへのディスパッチ時
-recipient ! RequestPriceQuote(rfq.rfqId, ...)
-...
-// 応答時
-sender ! PriceQuote(rpq.rfqId, ...)
-```
+### 構造図
 
----
+```mermaid
+graph LR
+    subgraph "Aggregator Pattern"
+        M1[Message 1<br/>rfqId=123] --> AG{Aggregator}
+        M2[Message 2<br/>rfqId=123] --> AG
+        M3[Message 3<br/>rfqId=123] --> AG
+        AG --> OUT[Aggregated<br/>Message]
+    end
 
-## システム構成図（Figure 7.5）
+    STATE[(State<br/>Store)]
+    AG <-.-> STATE
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                                                                         │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                      │
-│  │ PriceQuote  │  │ PriceQuote  │  │ PriceQuote  │                      │
-│  │ Fulfilled   │  │ Fulfilled   │  │ Fulfilled   │                      │
-│  │    📄       │  │    📄       │  │    📄       │                      │
-│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘                      │
-│         │                │                │                             │
-│         └────────────────┼────────────────┘                             │
-│                          │                                              │
-│                          ▼                                              │
-│                   ┌─────────────┐                                       │
-│                   │             │                                       │
-│                   │  Aggregator │                                       │
-│                   │   ┌───┐     │                                       │
-│                   │   │ ─▶│     │                                       │
-│                   │   └───┘     │                                       │
-│                   └──────┬──────┘                                       │
-│                          │                                              │
-│                          ▼                                              │
-│                   ┌─────────────┐                                       │
-│                   │  Quotation  │                                       │
-│                   │ Fulfillment │                                       │
-│                   │    📄📄📄   │                                       │
-│                   └─────────────┘                                       │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-
-※ Aggregatorは複数の個別フルフィルメントMessage (130) を
-   1つの完全な見積（Quotation）にまとめる
+    style AG fill:#ffcc80
 ```
 
----
+### 処理フロー
 
-## 具体例：価格見積の集約
+```mermaid
+sequenceDiagram
+    participant R1 as Recipient 1
+    participant R2 as Recipient 2
+    participant R3 as Recipient 3
+    participant AG as Aggregator
+    participant OUT as Output
 
-Recipient List (245) の例を拡張し、要求されたすべての価格見積のフルフィルメントを追跡するAggregatorを含める。複数の`PriceQuoteFulfillment`イベントメッセージ (207) が単一の`QuotationFulfillment`ドキュメントメッセージ (204) に集約される。
-
----
-
-## 実装例（Scala/Akka）
-
-### 新しいメッセージ定義
-
-```scala
-// 価格見積フルフィルメント（個別の見積完了通知）
-case class PriceQuoteFulfilled(priceQuote: PriceQuote)
-
-// フルフィルメントに必要な見積数の要求
-case class RequiredPriceQuotesForFulfillment(
-        rfqId: String,
-        quotesRequested: Int)
-
-// 見積フルフィルメント（集約結果）
-case class QuotationFulfillment(
-        rfqId: String,
-        quotesRequested: Int,
-        priceQuotes: Seq[PriceQuote],
-        requester: ActorRef)
+    Note over AG: 期待数: 3
+    R1->>AG: PriceQuote(rfqId=123)
+    Note over AG: 受信: 1/3
+    R3->>AG: PriceQuote(rfqId=123)
+    Note over AG: 受信: 2/3
+    R2->>AG: PriceQuote(rfqId=123)
+    Note over AG: 受信: 3/3 ✓ 完了
+    AG->>OUT: QuotationFulfillment(rfqId=123, quotes=[...])
 ```
 
-### ドライバアプリケーション
+## 4. トレードオフと制約 (Critical Thinking)
 
-```scala
-object Aggregator extends CompletableApp(5) {
-  // Aggregatorの作成
-  val priceQuoteAggregator =
-              system.actorOf(
-                Props[PriceQuoteAggregator],
-                "priceQuoteAggregator")
+### Pros (利点):
+- **結果統合**: 分散処理の結果を1つにまとめる
+- **完了検知**: 全ての応答が揃ったことを検知
+- **柔軟な終了条件**: 様々な完了条件に対応可能
+- **状態管理**: 未完了の集約を追跡
 
-  // OrderProcessorにAggregatorを注入
-  val orderProcessor = system.actorOf(
-        Props(classOf[MountaineeringSuppliesOrderProcessor],
-                      priceQuoteAggregator),
-        "orderProcessor")
+### Cons (欠点・副作用):
+- **ステートフル**: 状態を保持するためメモリ使用量が増加
+- **タイムアウト管理**: 応答が来ない場合の処理が必要
+- **スケーラビリティ**: 状態の分散管理が複雑
+- **障害復旧**: 状態の永続化・復旧が必要
 
-  ...
-}
-```
+### 完全性条件（Termination Criteria）
 
----
-
-## MountaineeringSuppliesOrderProcessor（Aggregator連携版）
-
-```scala
-import scala.collection.mutable.Map
-
-class MountaineeringSuppliesOrderProcessor(
-        priceQuoteAggregator: ActorRef)
-    extends Actor {
-
-  val interestRegistry =
-        Map[String, PriceQuoteInterest]()
-
-  def calculateRecipientList(
-        rfq: RequestForQuotation): Iterable[ActorRef] = {
-    for {
-      interest <- interestRegistry.values
-      if (rfq.totalRetailPrice >= interest.lowTotalRetail)
-      if (rfq.totalRetailPrice <= interest.highTotalRetail)
-    } yield interest.quoteProcessor
-  }
-
-  def dispatchTo(
-        rfq: RequestForQuotation,
-        recipientList: Iterable[ActorRef]) = {
-    var totalRequestedQuotes = 0
-
-    recipientList.map { recipient =>
-      rfq.retailItems.map { retailItem =>
-        println("OrderProcessor: " + rfq.rfqId
-              + " item: " + retailItem.itemId + " to: "
-              + recipient.path.toString)
-        recipient ! RequestPriceQuote(
-              rfq.rfqId, retailItem.itemId,
-              retailItem.retailPrice, rfq.totalRetailPrice)
-      }
-    }
-  }
-
-  def receive = {
-    case interest: PriceQuoteInterest =>
-      interestRegistry(interest.quoterId) = interest
-
-    // 価格見積を受信したらAggregatorに転送
-    case priceQuote: PriceQuote =>
-      priceQuoteAggregator !
-            PriceQuoteFulfilled(priceQuote)
-      println(s"OrderProcessor: received: $priceQuote")
-
-    case rfq: RequestForQuotation =>
-      val recipientList = calculateRecipientList(rfq)
-
-      // Aggregatorにフルフィルメント追跡を依頼
-      priceQuoteAggregator !
-            RequiredPriceQuotesForFulfillment(
-                  rfq.rfqId,
-                  recipientList.size
-                    * rfq.retailItems.size)
-
-      dispatchTo(rfq, recipientList)
-
-    // 集約完了通知を受信
-    case fulfillment: QuotationFulfillment =>
-      println(s"OrderProcessor: received: $fulfillment")
-      Aggregator.completedStep()
-
-    case message: Any =>
-      println(s"OrderProcessor: unexpected: $message")
-  }
-}
-```
-
-### 重要な変更点
-
-`MountaineeringSuppliesOrderProcessor`が計算されたRecipient List (245) にディスパッチする際、`PriceQuoteAggregator`に`RequiredPriceQuotesForFulfillment`メッセージを送信して、すべての`PriceQuote`インスタンスをフルフィルメントポイントまで追跡するよう依頼する。
-
----
-
-## PriceQuoteAggregator（Aggregator本体）
-
-```scala
-import scala.collection.mutable.Map
-
-class PriceQuoteAggregator extends Actor {
-  // rfqId → QuotationFulfillment のマップ
-  val fulfilledPriceQuotes =
-        Map[String, QuotationFulfillment]()
-
-  def receive = {
-    // フルフィルメント追跡の開始
-    case required: RequiredPriceQuotesForFulfillment =>
-      fulfilledPriceQuotes(required.rfqId) =
-            QuotationFulfillment(
-                  required.rfqId,
-                  required.quotesRequested,
-                  Vector(),
-                  sender)
-
-    // 個別の価格見積を受信・集約
-    case priceQuoteFulfilled: PriceQuoteFulfilled =>
-      val previousFulfillment =
-              fulfilledPriceQuotes(
-                priceQuoteFulfilled.priceQuote.rfqId)
-
-      // 新しい見積を追加
-      val currentPriceQuotes =
-              previousFulfillment.priceQuotes :+
-                    priceQuoteFulfilled.priceQuote
-
-      val currentFulfillment =
-          QuotationFulfillment(
-              previousFulfillment.rfqId,
-              previousFulfillment.quotesRequested,
-              currentPriceQuotes,
-              previousFulfillment.requester)
-
-      // 全ての見積が揃ったかチェック
-      if (currentPriceQuotes.size >=
-          currentFulfillment.quotesRequested) {
-        // 完了：リクエスターに送信してクリーンアップ
-        currentFulfillment.requester ! currentFulfillment
-        fulfilledPriceQuotes.remove(
-              priceQuoteFulfilled.priceQuote.rfqId)
-      } else {
-        // 未完了：状態を更新
-        fulfilledPriceQuotes(
-              priceQuoteFulfilled.priceQuote.rfqId) =
-                    currentFulfillment
-      }
-
-      println(s"PriceQuoteAggregator: fulfilled↩
-      price quote: $priceQuoteFulfilled")
-
-    case message: Any =>
-      println(s"PriceQuoteAggregator: unexpected: $message")
-  }
-}
-```
-
-### PriceQuoteAggregatorの動作
-
-1. `RequiredPriceQuotesForFulfillment`を受信すると、`fulfilledPriceQuotes`マップに新しい`QuotationFulfillment`エントリを作成
-2. 以降、各`PriceQuoteFulfilled`を受信するたびに、`PriceQuoteAggregator`は各`PriceQuote`（`PriceQuoteFulfilled`メッセージに含まれる）を`QuotationFulfillment`に集約
-3. 要求された各`PriceQuote`を受信すると、完了した`QuotationFulfillment`を`OrderProcessor`に送信
-
----
-
-## 処理フロー図
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        Aggregator 処理フロー                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  1. フルフィルメント追跡の開始                                           │
-│                                                                         │
-│  ┌─────────────────────┐                  ┌─────────────────────┐       │
-│  │ OrderProcessor      │ ───────────────▶ │ PriceQuoteAggregator│       │
-│  │                     │ RequiredPrice    │                     │       │
-│  │ rfqId, count        │ QuotesFor        │ fulfilledPriceQuotes│       │
-│  └─────────────────────┘ Fulfillment      │ [rfqId] = new       │       │
-│                                           │ QuotationFulfillment│       │
-│                                           └─────────────────────┘       │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  2. 見積の収集・集約                                                     │
-│                                                                         │
-│  ┌────────────┐                                                         │
-│  │ QuoteEngine│─┐                                                       │
-│  └────────────┘ │  PriceQuote                                           │
-│  ┌────────────┐ │      │                                                │
-│  │ QuoteEngine│─┼──────┤                                                │
-│  └────────────┘ │      │                                                │
-│  ┌────────────┐ │      ▼                                                │
-│  │ QuoteEngine│─┘  ┌─────────────────────┐                              │
-│  └────────────┘    │ OrderProcessor      │                              │
-│                    │                     │                              │
-│                    │ PriceQuoteFulfilled │                              │
-│                    └──────────┬──────────┘                              │
-│                               │                                         │
-│                               ▼                                         │
-│                    ┌─────────────────────┐                              │
-│                    │ PriceQuoteAggregator│                              │
-│                    │                     │                              │
-│                    │ currentPriceQuotes  │                              │
-│                    │ :+ priceQuote       │                              │
-│                    └─────────────────────┘                              │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  3. 完了判定と結果送信                                                   │
-│                                                                         │
-│                    ┌─────────────────────┐                              │
-│                    │ PriceQuoteAggregator│                              │
-│                    │                     │                              │
-│                    │ if (size >= requested)                             │
-│                    │   requester ! fulfillment                          │
-│                    │   remove(rfqId)                                    │
-│                    │ else                                               │
-│                    │   update state                                     │
-│                    └──────────┬──────────┘                              │
-│                               │                                         │
-│                               │ QuotationFulfillment                    │
-│                               │ (when complete)                         │
-│                               ▼                                         │
-│                    ┌─────────────────────┐                              │
-│                    │ OrderProcessor      │                              │
-│                    │                     │                              │
-│                    │ 全見積を含む        │                              │
-│                    │ 集約結果を受信      │                              │
-│                    └─────────────────────┘                              │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 実行結果（抜粋）
-
-```
-OrderProcessor: 123 item: 1 to: akka://default/↩
-user/rockBottomOuterwear
-OrderProcessor: 123 item: 2 to: akka://default/↩
-user/rockBottomOuterwear
-OrderProcessor: 123 item: 3 to: akka://default/↩
-user/rockBottomOuterwear
-OrderProcessor: 123 item: 1 to: akka://default/↩
-user/mountainAscent
-...
-OrderProcessor: 140 item: 19 to: akka://default/↩
-user/highSierra
-OrderProcessor: received: PriceQuote(123,1,29.95,29.351)
-PriceQuoteAggregator: fulfilled price quote:↩
- PriceQuoteFulfilled(PriceQuote(123,1,29.95,29.351))
-OrderProcessor: received: PriceQuote(123,2,99.95,↩
-97.95100000000001)
-PriceQuoteAggregator: fulfilled price quote:↩
- PriceQuoteFulfilled(PriceQuote(123,2,99.95,↩
-97.95100000000001))
-OrderProcessor: received: PriceQuote(123,3,14.95,14.651)
-PriceQuoteAggregator: fulfilled price quote:↩
- PriceQuoteFulfilled(PriceQuote(123,3,14.95,14.651))
-...
-PriceQuote(125,7,724.99,695.9904),Actor[akka://↩
-default/user/orderProcessor])
-OrderProcessor: received: QuotationFulfillment(129,16,↩
-Vector(PriceQuote(129,8,119.99,112.7906),↩
- PriceQuote(129,9,499.95,469.953), PriceQuote(129,10,↩
-519.0,487.86), PriceQuote(129,11,209.5,196.93),↩
-...
-PriceQuote(140,19,789.99,758.3904)),Actor[akka://↩
-default/user/orderProcessor])
-Aggregator: is completed.
-```
-
----
-
-## 終了条件（Termination Criteria）
-
-Aggregatorは様々な終了条件で設計できる：
-
-| 終了条件 | 説明 |
-|---------|------|
-| **Wait for All** | すべての期待される応答を待つ |
+| 条件 | 説明 |
+|-----|------|
+| **Wait for All** | 期待する全ての応答を待つ |
 | **Timeout** | 指定時間経過後に終了 |
 | **First Best** | 最初の最適な応答で終了 |
 | **Timeout with Override** | タイムアウトだが、より良い応答があれば上書き |
 | **External Event** | 外部イベントにより終了 |
 
-この例では最初の**Wait for All**を使用している。
+### Anti-Pattern:
+- タイムアウトを設定しない（永久に待機する可能性）
+- 状態の永続化を考慮しない（障害時にデータ損失）
+- Correlation IDを使用しない（メッセージの関連付けができない）
 
----
+## 5. 実装イメージ (Implementation)
 
-## Scatter-Gather パターンとの関係
+### Akka Typed Actor (Scala)
 
-Recipient List (245) とAggregatorの組み合わせは、**Scatter-Gather (272)** パターンを実装する1つの方法である。Scatter-Gatherは**Publish-Subscribe Channel (154)** を使用してRecipient List (245) の代わりに実装することも可能。
+```scala
+import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.scaladsl.{Behaviors, TimerScheduler}
+import scala.concurrent.duration._
 
+// ドメインモデル
+case class PriceQuote(
+  quoterId: String,
+  rfqId: String,
+  itemId: String,
+  retailPrice: Double,
+  discountPrice: Double
+)
+
+case class QuotationFulfillment(
+  rfqId: String,
+  priceQuotes: Seq[PriceQuote]
+)
+
+// Aggregator
+object PriceQuoteAggregator {
+  sealed trait Command
+  case class AddQuote(quote: PriceQuote) extends Command
+  case class ExpectQuotes(rfqId: String, expectedCount: Int, replyTo: ActorRef[QuotationFulfillment]) extends Command
+  private case class Timeout(rfqId: String) extends Command
+
+  case class AggregationState(
+    expectedCount: Int,
+    quotes: Vector[PriceQuote],
+    replyTo: ActorRef[QuotationFulfillment]
+  )
+
+  def apply(): Behavior[Command] =
+    Behaviors.withTimers { timers =>
+      aggregator(Map.empty, timers)
+    }
+
+  private def aggregator(
+    aggregations: Map[String, AggregationState],
+    timers: TimerScheduler[Command]
+  ): Behavior[Command] =
+    Behaviors.receive { (context, command) =>
+      command match {
+        // 新しい集約を開始
+        case ExpectQuotes(rfqId, expectedCount, replyTo) =>
+          context.log.info(s"Expecting $expectedCount quotes for $rfqId")
+
+          // タイムアウトを設定
+          timers.startSingleTimer(rfqId, Timeout(rfqId), 5.seconds)
+
+          val state = AggregationState(expectedCount, Vector.empty, replyTo)
+          aggregator(aggregations + (rfqId -> state), timers)
+
+        // 見積を追加
+        case AddQuote(quote) =>
+          aggregations.get(quote.rfqId) match {
+            case Some(state) =>
+              val newQuotes = state.quotes :+ quote
+              context.log.info(
+                s"Added quote for ${quote.rfqId}: ${newQuotes.size}/${state.expectedCount}"
+              )
+
+              // 全て揃ったら発行
+              if (newQuotes.size >= state.expectedCount) {
+                timers.cancel(quote.rfqId)
+                val fulfillment = QuotationFulfillment(quote.rfqId, newQuotes)
+                state.replyTo ! fulfillment
+                context.log.info(s"Aggregation complete for ${quote.rfqId}")
+                aggregator(aggregations - quote.rfqId, timers)
+              } else {
+                val newState = state.copy(quotes = newQuotes)
+                aggregator(aggregations + (quote.rfqId -> newState), timers)
+              }
+
+            case None =>
+              context.log.warn(s"No aggregation found for ${quote.rfqId}")
+              Behaviors.same
+          }
+
+        // タイムアウト処理
+        case Timeout(rfqId) =>
+          aggregations.get(rfqId) match {
+            case Some(state) =>
+              context.log.warn(
+                s"Timeout for $rfqId with ${state.quotes.size}/${state.expectedCount} quotes"
+              )
+              // 受信済みの見積で発行
+              val fulfillment = QuotationFulfillment(rfqId, state.quotes)
+              state.replyTo ! fulfillment
+              aggregator(aggregations - rfqId, timers)
+
+            case None =>
+              Behaviors.same
+          }
+      }
+    }
+}
+
+// 最良価格を選択する拡張版Aggregator
+object BestPriceAggregator {
+  case class BestPriceQuotation(
+    rfqId: String,
+    bestQuotes: Map[String, PriceQuote]  // itemId -> 最安値
+  )
+
+  def selectBestPrices(quotes: Seq[PriceQuote]): Map[String, PriceQuote] = {
+    quotes.groupBy(_.itemId).map { case (itemId, itemQuotes) =>
+      itemId -> itemQuotes.minBy(_.discountPrice)
+    }
+  }
+}
+
+// 使用例
+object AggregatorExample {
+  def apply(): Behavior[Nothing] =
+    Behaviors.setup[Nothing] { context =>
+      val resultCollector = context.spawn(
+        Behaviors.receiveMessage[QuotationFulfillment] { fulfillment =>
+          println(s"Received ${fulfillment.priceQuotes.size} quotes for ${fulfillment.rfqId}")
+          Behaviors.same
+        },
+        "resultCollector"
+      )
+
+      val aggregator = context.spawn(PriceQuoteAggregator(), "aggregator")
+
+      // 3つの見積を期待
+      aggregator ! PriceQuoteAggregator.ExpectQuotes("RFQ-001", 3, resultCollector)
+
+      // 見積を追加
+      aggregator ! PriceQuoteAggregator.AddQuote(
+        PriceQuote("SupplierA", "RFQ-001", "item1", 100.0, 90.0)
+      )
+      aggregator ! PriceQuoteAggregator.AddQuote(
+        PriceQuote("SupplierB", "RFQ-001", "item1", 100.0, 85.0)
+      )
+      aggregator ! PriceQuoteAggregator.AddQuote(
+        PriceQuote("SupplierC", "RFQ-001", "item1", 100.0, 88.0)
+      )
+
+      Behaviors.empty
+    }
+}
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Scatter-Gather パターン                       │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  実装方法1: Recipient List + Aggregator                  │   │
-│  │                                                          │   │
-│  │  ┌────────────┐        ┌────────────┐                    │   │
-│  │  │ Recipient  │───────▶│ Aggregator │                    │   │
-│  │  │    List    │        │            │                    │   │
-│  │  └────────────┘        └────────────┘                    │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │  実装方法2: Publish-Subscribe Channel + Aggregator       │   │
-│  │                                                          │   │
-│  │  ┌────────────┐        ┌────────────┐                    │   │
-│  │  │ Pub-Sub    │───────▶│ Aggregator │                    │   │
-│  │  │  Channel   │        │            │                    │   │
-│  │  └────────────┘        └────────────┘                    │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
 
----
+## 6. リンクと関係性 (Network Knowledge)
 
-## Composed Message Processor との関係
+### 関連パターン:
+- [[splitter|Splitter]] (補完: 分割されたメッセージを集約)
+- [[recipient_list|Recipient List]] (補完: 複数宛先への応答を集約)
+- [[scatter_gather|Scatter-Gather]] (組み合わせ: Recipient List/Pub-Sub + Aggregator)
+- [[composed_message_processor|Composed Message Processor]] (組み合わせ: Splitter + Router + Aggregator)
+- [[correlation_identifier|Correlation Identifier]] - メッセージの関連付け
 
-Recipient List (245) とAggregator（またはPublish-Subscribe Channelを使用する場合）は、より大きなパターンである**Composed Message Processor (270)** を構成する。
+### 構成要素:
+- [[message_channel|Message Channel]] - 入出力チャネル
+- [[message_store|Message Store]] - 状態の永続化
 
-この構成の利点は、結合されたコンポーネントが**Pipes and Filters (135)** スタイルの単一フィルタとしてより容易に機能できることである。
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│              Composed Message Processor (270)                    │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                    Single Filter                          │   │
-│  │  ┌───────────┐  ┌───────────┐  ┌───────────┐             │   │
-│  │  │           │  │           │  │           │             │   │
-│  │  │ Recipient │  │ Processing│  │ Aggregator│             │   │
-│  │  │   List    │─▶│           │─▶│           │             │   │
-│  │  │           │  │           │  │           │             │   │
-│  │  └───────────┘  └───────────┘  └───────────┘             │   │
-│  │                                                          │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                                                                 │
-│  Pipes and Filters スタイルでの利用が容易                        │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 参照
-
-- Recipient List (245)
-- Correlation Identifier (215)
-- Event Message (207)
-- Document Message (204)
-- Message (130)
-- Scatter-Gather (272)
-- Publish-Subscribe Channel (154)
-- Composed Message Processor (270)
-- Pipes and Filters (135)
+### 次のステップ:
+- [[scatter_gather|Scatter-Gather]] - 問い合わせ→応答集約の完全なパターン
+- [[resequencer|Resequencer]] - 順序復元が必要な場合

@@ -1,492 +1,284 @@
 # Resequencer
 
-## 概念図
+## 1. 3行要約 (Feynman Technique)
+> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
+- 「バラバラに届いた本を巻数順に並べ直す図書館員」のような役割
+- 順序が乱れて到着したメッセージを、元のシーケンス順に並べ替えて出力
+- 核心的価値：**メッセージ順序の復元**
 
+## 2. 解決する課題 (Context & Problem)
+> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
+
+- **Before:**
+  - Splitterで分割されたメッセージが、異なるルートで処理され順序が乱れる
+  - 例：メッセージ1,2,3を送信したが、処理時間の違いで3,1,2の順で到着
+  - 参照整合性など、順序保証が必要な処理ステップが存在
+
+- **Trigger:**
+  - 順不同で到着するメッセージを、元の順序に戻したい
+  - 下流のシステムがメッセージの順序に依存している
+  - 複数の送信元からのメッセージをマージする際に順序を保証したい
+
+## 3. ソリューションと構造 (Structure & Visual)
+> **目的:** Dual Coding（文字と図）により記憶定着を図る。
+
+### 仕組み
+ステートフルなフィルターであるResequencerを使用して、順不同で到着するメッセージを収集・再順序化し、指定された順序で出力チャネルに発行する。
+
+- 順不同で到着するメッセージストリームを受け取る
+- 内部バッファに順序外のメッセージを保持
+- 完全なシーケンスが得られるまで待機
+- 順序通りのメッセージを出力チャネルに発行
+- メッセージ内容は通常変更しない
+
+### 構造図
+
+```mermaid
+graph LR
+    subgraph "Resequencer Pattern"
+        M3[Message 3] --> RS{Resequencer}
+        M1[Message 1] --> RS
+        M2[Message 2] --> RS
+    end
+
+    RS --> O1[Message 1]
+    RS --> O2[Message 2]
+    RS --> O3[Message 3]
+
+    BUF[(Buffer<br/>順序待ち)]
+    RS <-.-> BUF
+
+    style RS fill:#ffcc80
 ```
-         ┌─────────────────────────────────────────┐
-         │             Resequencer                 │
-         │                                         │
-         │    ┌─────┐      ┌─────┐                │
-    ────▶│───▶│  3  │      │     │                │
-         │    ├─────┤      │     │────────────────┼───▶ 1
-    ────▶│───▶│  1  │─────▶│ ──▶ │────────────────┼───▶ 2
-         │    ├─────┤      │     │────────────────┼───▶ 3
-    ────▶│───▶│  2  │      │     │                │
-         │    └─────┘      └─────┘                │
-         │   (順不同)       (並べ替え)              │
-         └─────────────────────────────────────────┘
+
+### 処理フロー
+
+```mermaid
+sequenceDiagram
+    participant IN as 入力（順不同）
+    participant RS as Resequencer
+    participant OUT as 出力（順序通り）
+
+    IN->>RS: Message(index=3)
+    Note over RS: バッファ: [_,_,3]<br/>待機中...
+
+    IN->>RS: Message(index=1)
+    Note over RS: バッファ: [1,_,3]<br/>index=1を発行可能
+    RS->>OUT: Message(index=1)
+
+    IN->>RS: Message(index=2)
+    Note over RS: バッファ: [_,2,3]<br/>index=2,3を発行可能
+    RS->>OUT: Message(index=2)
+    RS->>OUT: Message(index=3)
 ```
 
----
+## 4. トレードオフと制約 (Critical Thinking)
 
-## 定義
+### Pros (利点):
+- **順序保証**: 下流システムに順序通りのメッセージを保証
+- **透明性**: 上流・下流の変更なしに順序問題を解決
+- **柔軟性**: 任意のシーケンス番号方式に対応可能
 
-Resequencerは、元のシーケンスから外れたメッセージのセットを受信し、最終宛先に送信する前に必要なシーケンスに戻すパターンである。
+### Cons (欠点・副作用):
+- **ステートフル**: バッファにメッセージを保持するためメモリ使用量増加
+- **レイテンシ**: 先行メッセージが到着するまで後続メッセージを保持
+- **タイムアウト管理**: メッセージが欠落した場合の処理が必要
+- **出力チャネル要件**: 出力チャネルも順序保証が必要
 
----
+### メッセージ配信の基本保証（Akka）
 
-## Akkaにおけるメッセージ順序保証
-
-Request-Reply (209) の議論に関連して、メッセージ配信の順序について疑問が生じることがある。
-
-### Akkaドキュメントからのメッセージ保証
-
-Akkaおよび他のアクターモデルシステムでは、一般的に、あるアクターから別のアクターへの直接メッセージ送信の結果としてメッセージが受信されるシーケンスについて心配する必要はない。
-
-Akkaドキュメント [Akka-Message-Guarantees] によると、あるアクターから別のアクターへの直接メッセージは、最初のアクターが送信した順序で常に受信される。
-
-### シナリオ例
-
-以下のシナリオを想定：
-- アクターA1がメッセージM1、M2、M3をA2に送信
-- アクターA3がメッセージM4、M5、M6をA2に送信
-
-これらの2つのシナリオに基づく事実：
-
-| 番号 | 事実 |
+| 事実 | 説明 |
 |-----|------|
-| 1 | M1が配信される場合、M2とM3より前に配信される必要がある |
-| 2 | M2が配信される場合、M3より前に配信される必要がある |
-| 3 | M4が配信される場合、M5とM6より前に配信される必要がある |
-| 4 | M5が配信される場合、M6より前に配信される必要がある |
-| 5 | **A2はA1からのメッセージとA3からのメッセージがインターリーブされて見える可能性がある** |
-| 6 | デフォルトでは保証配信がないため、メッセージのいずれかがドロップされる可能性がある（A2に到着しない） |
+| 同一送信元からの順序 | A1→A2への直接送信では、M1,M2,M3は順序通り到着 |
+| 複数送信元の場合 | A1,A3→A2への送信では、インターリーブの可能性あり |
+| 配信保証なし | デフォルトではメッセージがドロップする可能性あり |
 
-**結論**：あるアクターから別のアクターに直接送信される基本的なメッセージのシーケンスが順序通りに受信されないことを心配する必要はない。それは起こらない。
+### Anti-Pattern:
+- タイムアウトを設定しない（永久にバッファに溜まる可能性）
+- シーケンス番号を付与せずにResequencerを使用
+- 単一送信元からの直接送信に対してResequencerを使用（不要）
 
----
+## 5. 実装イメージ (Implementation)
 
-## Resequencerが必要なケース
-
-複数の送信アクターが存在する複雑なメッセージルーティングシナリオでは、メッセージのシーケンスが順序通りに受信されない可能性がある（前述の#5、A1とA3からのメッセージがA2に到着する際にインターリーブされる）。
-
-これは、例えばContent-Based Router (228) やSplitter (254) を使用する場合に発生する可能性がある。大きなメッセージが複数の小さなメッセージに分割され、小さなメッセージの内容に基づいてルーティングされる場合を想像してほしい。すべての細粒度メッセージを処理するプロセスの数と処理時間により、最終宛先で結果が順序通りに受信されない可能性が容易に生じる。
-
-### Resequencerが必要な場合と不要な場合
-
-| ケース | Resequencerの必要性 |
-|-------|-------------------|
-| Scatter-Gather (272) の例 | 不要な場合がある |
-| 元のシーケンスに従って受信する必要がある場合 | **必要** |
-
----
-
-## システム構成図（Figure 7.6）
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                                                                         │
-│     ┌───┐      ┌───┐      ┌───┐                                         │
-│     │ 1 │      │   │      │   │                                         │
-│     └─┬─┘      │ 2 │      │ 3 │                                         │
-│       │        └─┬─┘      └─┬─┘                                         │
-│       │          │          │                                           │
-│   ┌───┴───┐  ┌───┴───┐  ┌───┴───┐                                       │
-│   │  📄   │  │  📄   │  │  📄   │                                       │
-│   └───┬───┘  └───┬───┘  └───┬───┘                                       │
-│       │          │          │                                           │
-│       └──────────┼──────────┘                                           │
-│                  │                                                      │
-│                  ▼                                                      │
-│           ┌─────────────┐                                               │
-│           │             │                                               │
-│           │ Resequencer │                                               │
-│           │  ┌───────┐  │                                               │
-│           │  │ □ ─▶ □│  │                                               │
-│           │  │   □   │  │                                               │
-│           │  └───────┘  │                                               │
-│           └──────┬──────┘                                               │
-│                  │                                                      │
-│                  ▼                                                      │
-│     ┌───┐      ┌───┐      ┌───┐                                         │
-│     │ 3 │      │ 2 │      │ 1 │                                         │
-│     └─┬─┘      └─┬─┘      └─┬─┘                                         │
-│       │          │          │                                           │
-│   ┌───┴───┐  ┌───┴───┐  ┌───┴───┐                                       │
-│   │  📄   │  │  📄   │  │  📄   │                                       │
-│   └───────┘  └───────┘  └───────┘                                       │
-│                                                                         │
-│   （順序が正しく並べ替えられた出力）                                      │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-
-※ Message (130) が任意の順序で到着することが許容できない場合、
-   Resequencerを使用して必要な順序に並べ替える
-```
-
----
-
-## 実装例（Scala/Akka）
-
-### メッセージ定義
+### Akka Typed Actor (Scala)
 
 ```scala
-package co.vaughnvernon.reactiveenterprise.resequencer
-
-import java.util.concurrent.TimeUnit
-import java.util.Date
-import scala.concurrent._
+import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.scaladsl.{Behaviors, TimerScheduler}
+import scala.collection.immutable.TreeMap
 import scala.concurrent.duration._
-import scala.util._
-import ExecutionContext.Implicits.global
-import akka.actor._
-import co.vaughnvernon.reactiveenterprise._
 
 // シーケンス付きメッセージ
-case class SequencedMessage(
-        correlationId: String,  // Correlation Identifier (215)
-        index: Int,             // シーケンス内の位置
-        total: Int)             // メッセージの総数
+case class SequencedMessage[T](
+  correlationId: String,
+  sequenceNumber: Int,
+  totalCount: Option[Int],  // 総数が分かっている場合
+  payload: T
+)
 
-// 再シーケンス処理用のメッセージコレクション
-case class ResequencedMessages(
-        dispatchableIndex: Int,
-        sequencedMessages: Array[SequencedMessage]) {
+// Resequencer
+object Resequencer {
+  sealed trait Command[+T]
+  case class Receive[T](message: SequencedMessage[T]) extends Command[T]
+  private case class Timeout[T](correlationId: String) extends Command[T]
 
-  def advancedTo(dispatchableIndex: Int) = {
-    ResequencedMessages(
-          dispatchableIndex,
-          sequencedMessages)
-  }
-}
-```
+  case class SequenceState[T](
+    nextExpected: Int,
+    buffer: TreeMap[Int, SequencedMessage[T]],
+    totalCount: Option[Int]
+  )
 
-### ドライバアプリケーション
+  def apply[T](
+    output: ActorRef[T],
+    timeout: FiniteDuration = 5.seconds
+  ): Behavior[Command[T]] =
+    Behaviors.withTimers { timers =>
+      resequencer(Map.empty, output, timers, timeout)
+    }
 
-```scala
-object Resequencer extends CompletableApp(10) {
-  // 最終宛先（正しい順序でメッセージを受信する必要がある）
-  val sequencedMessageConsumer = system.actorOf(
-            Props[SequencedMessageConsumer],
-            "sequencedMessageConsumer")
+  private def resequencer[T](
+    sequences: Map[String, SequenceState[T]],
+    output: ActorRef[T],
+    timers: TimerScheduler[Command[T]],
+    timeout: FiniteDuration
+  ): Behavior[Command[T]] =
+    Behaviors.receive { (context, command) =>
+      command match {
+        case Receive(message) =>
+          val correlationId = message.correlationId
+          val state = sequences.getOrElse(
+            correlationId,
+            SequenceState[T](1, TreeMap.empty, message.totalCount)
+          )
 
-  // Resequencer（順序を並べ替える）
-  val resequencerConsumer =
-      system.actorOf(
-          Props(classOf[ResequencerConsumer],
-                  sequencedMessageConsumer),
-          "resequencerConsumer")
+          // タイマーを設定/リセット
+          timers.startSingleTimer(
+            correlationId,
+            Timeout(correlationId),
+            timeout
+          )
 
-  // ChaosRouter（意図的に順序を乱す）
-  val chaosRouter = system.actorOf(
-            Props(classOf[ChaosRouter],
-                  resequencerConsumer),
-            "chaosRouter")
+          // バッファに追加
+          val newBuffer = state.buffer + (message.sequenceNumber -> message)
+          val newState = state.copy(
+            buffer = newBuffer,
+            totalCount = state.totalCount.orElse(message.totalCount)
+          )
 
-  // ABCシーケンスのメッセージを送信
-  for (index <- 1 to 5)
-        chaosRouter !
-            SequencedMessage("ABC", index, 5)
+          // 順序通りに出力可能なメッセージを発行
+          val (dispatchedState, dispatched) = dispatchInOrder(newState, output, context)
 
-  // XYZシーケンスのメッセージを送信
-  for (index <- 1 to 5)
-        chaosRouter !
-            SequencedMessage("XYZ", index, 5)
+          if (dispatched > 0) {
+            context.log.info(s"Dispatched $dispatched messages for $correlationId")
+          }
 
-  awaitCompletion
-  println("Resequencer: is completed.")
-}
-```
+          // 完了チェック
+          val isComplete = dispatchedState.totalCount.exists { total =>
+            dispatchedState.nextExpected > total
+          }
 
-### 3つのアクターの役割
+          if (isComplete) {
+            timers.cancel(correlationId)
+            context.log.info(s"Sequence $correlationId complete")
+            resequencer(sequences - correlationId, output, timers, timeout)
+          } else {
+            resequencer(
+              sequences + (correlationId -> dispatchedState),
+              output, timers, timeout
+            )
+          }
 
-| アクター | 役割 |
-|---------|------|
-| **SequencedMessageConsumer** | 正しい順序でメッセージを受信する必要がある最終宛先 |
-| **ResequencerConsumer** | 順序通りでないメッセージを受信し、正しい順序に戻す |
-| **ChaosRouter** | 正しい順序で受信したメッセージを意図的に順序通りでなくする |
-
-`SequencedMessage`には`correlationId`、メッセージシーケンスの`index`、メッセージの`total`数が含まれる。`correlationId`はCorrelation Identifier (215) で説明されている。
-
----
-
-## ChaosRouter（意図的な順序乱し）
-
-```scala
-class ChaosRouter(consumer: ActorRef) extends Actor {
-  val random = new Random((new Date()).getTime)
-
-  def receive = {
-    case sequencedMessage: SequencedMessage =>
-      // 1〜100ミリ秒のランダムな遅延を設定
-      val millis = random.nextInt(100) + 1
-      println(s"ChaosRouter: delaying delivery↩
-      of $sequencedMessage for $millis milliseconds")
-
-      val duration =
-          Duration.create(
-            millis,
-            TimeUnit.MILLISECONDS)
-
-      // 遅延後にconsumer（ResequencerConsumer）に送信
-      context.system.scheduler.scheduleOnce(
-            duration,
-            consumer,
-            sequencedMessage)
-
-    case message: Any =>
-      println(s"ChaosRouter: unexpected: $message")
-  }
-}
-```
-
-`ChaosRouter`は直接のコンシューマー（`ResequencerConsumer`）への`ActorRef`を保持している。`ChaosRouter`の基本的な責任は、メッセージシーケンシングに混乱を生じさせることである。1〜100ミリ秒のランダムな時間のタイマーを設定し、タイマーが経過すると、関連する`SequencedMessage`をコンシューマーである`ResequencerConsumer`にディスパッチする。
-
----
-
-## ResequencerConsumer（Resequencer本体）
-
-```scala
-class ResequencerConsumer(
-        actualConsumer: ActorRef)
-    extends Actor {
-
-  // correlationId → ResequencedMessages のマップ
-  val resequenced =
-        scala.collection.mutable.Map[
-          String,
-          ResequencedMessages]()
-
-  // 順序通りのメッセージをすべて配信
-  def dispatchAllSequenced(
-        correlationId: String) = {
-    val resequencedMessages = resequenced(correlationId)
-    var dispatchableIndex =
-        resequencedMessages.dispatchableIndex
-
-    resequencedMessages.sequencedMessages.map {
-        sequencedMessage =>
-      if (sequencedMessage.index == dispatchableIndex) {
-        actualConsumer ! sequencedMessage
-        dispatchableIndex += 1
+        case Timeout(correlationId) =>
+          sequences.get(correlationId).foreach { state =>
+            context.log.warn(
+              s"Timeout for $correlationId, " +
+              s"buffer size: ${state.buffer.size}, " +
+              s"next expected: ${state.nextExpected}"
+            )
+            // タイムアウト時は残りのバッファを順序通りに出力
+            state.buffer.values.toSeq
+              .sortBy(_.sequenceNumber)
+              .foreach(msg => output ! msg.payload)
+          }
+          resequencer(sequences - correlationId, output, timers, timeout)
       }
     }
 
-    // 次に配信可能なインデックスを更新
-    resequenced(correlationId) =
-        resequencedMessages.advancedTo(dispatchableIndex)
-  }
+  private def dispatchInOrder[T](
+    state: SequenceState[T],
+    output: ActorRef[T],
+    context: akka.actor.typed.scaladsl.ActorContext[Command[T]]
+  ): (SequenceState[T], Int) = {
+    var current = state
+    var dispatched = 0
 
-  // ダミーメッセージの配列を生成（プレースホルダー）
-  def dummySequencedMessages(
-        count: Int): Seq[SequencedMessage] = {
-    for {
-      index <- 1 to count
-    } yield {
-      SequencedMessage("", -1, count)
-    }
-  }
+    while (current.buffer.contains(current.nextExpected)) {
+      val message = current.buffer(current.nextExpected)
+      output ! message.payload
+      context.log.debug(
+        s"Dispatched seq ${message.sequenceNumber} for ${message.correlationId}"
+      )
 
-  def receive = {
-    case unsequencedMessage: SequencedMessage =>
-      println(s"ResequencerConsumer: received:↩
-      $unsequencedMessage")
-      resequence(unsequencedMessage)
-      dispatchAllSequenced(unsequencedMessage.correlationId)
-      removeCompleted(unsequencedMessage.correlationId)
-
-    case message: Any =>
-      println(s"ResequencerConsumer: unexpected: $message")
-  }
-
-  // 完了したシーケンスを削除
-  def removeCompleted(correlationId: String) = {
-    val resequencedMessages = resequenced(correlationId)
-
-    if (resequencedMessages.dispatchableIndex >
-        resequencedMessages.sequencedMessages(0).total) {
-      resequenced.remove(correlationId)
-      println(s"ResequencerConsumer: removed completed:↩
-      $correlationId")
-    }
-  }
-
-  // メッセージを正しい位置に配置
-  def resequence(
-        sequencedMessage: SequencedMessage) = {
-    // 新しいcorrelationIdの場合、配列を初期化
-    if (!resequenced.contains(
-          sequencedMessage.correlationId)) {
-      resequenced(sequencedMessage.correlationId) =
-          ResequencedMessages(
-              1,
-              dummySequencedMessages(
-                  sequencedMessage.total).toArray)
+      current = current.copy(
+        nextExpected = current.nextExpected + 1,
+        buffer = current.buffer - current.nextExpected
+      )
+      dispatched += 1
     }
 
-    // 正しいインデックス位置にメッセージを配置
-    resequenced(sequencedMessage.correlationId)
-        .sequencedMessages
-        .update(sequencedMessage.index - 1,
-              sequencedMessage)
+    (current, dispatched)
   }
+}
+
+// 使用例
+object ResequencerExample {
+  case class OrderItem(id: String, name: String)
+
+  def apply(): Behavior[Nothing] =
+    Behaviors.setup[Nothing] { context =>
+      val outputProcessor = context.spawn(
+        Behaviors.receiveMessage[OrderItem] { item =>
+          println(s"Processing in order: ${item.id}")
+          Behaviors.same
+        },
+        "outputProcessor"
+      )
+
+      val resequencer = context.spawn(
+        Resequencer[OrderItem](outputProcessor),
+        "resequencer"
+      )
+
+      // 順不同で到着するメッセージをシミュレート
+      resequencer ! Resequencer.Receive(
+        SequencedMessage("order-1", 3, Some(3), OrderItem("item3", "C"))
+      )
+      resequencer ! Resequencer.Receive(
+        SequencedMessage("order-1", 1, Some(3), OrderItem("item1", "A"))
+      )
+      resequencer ! Resequencer.Receive(
+        SequencedMessage("order-1", 2, Some(3), OrderItem("item2", "B"))
+      )
+      // 出力: item1 -> item2 -> item3 (順序通り)
+
+      Behaviors.empty
+    }
 }
 ```
 
-### ResequencerConsumerの動作
+## 6. リンクと関係性 (Network Knowledge)
 
-`correlationId`に基づいて、`ResequencerConsumer`は受信した各`SequencedMessage`を徐々に元の正しいシーケンスに配置する。`SequencedMessageConsumer`が受信する必要がある順序で`SequencedMessage`インスタンスを持つとすぐに、それらをディスパッチする。
+### 関連パターン:
+- [[splitter|Splitter]] (原因: 分割により順序が乱れる)
+- [[aggregator|Aggregator]] (比較: 集約 vs 順序復元)
+- [[content_based_router|Content-Based Router]] (原因: ルーティングにより順序が乱れる)
+- [[message_sequence|Message Sequence]] - シーケンス情報の付与
+- [[correlation_identifier|Correlation Identifier]] - メッセージの関連付け
 
-メッセージの受信順序に応じて、これは単一のバースト、複数のバースト、または1つずつ発生する可能性がある。例えば、シーケンス5、4、3、2、そして1のメッセージが受信された場合、メソッド`dispatchAllSequenced()`がインデックス1のメッセージを見ると、メッセージ1〜5のバーストを`actualConsumer`に送信する。
+### 構成要素:
+- [[message_channel|Message Channel]] - 入出力チャネル
+- [[message_store|Message Store]] - バッファの永続化
 
----
-
-## SequencedMessageConsumer（最終宛先）
-
-```scala
-class SequencedMessageConsumer extends Actor {
-  def receive = {
-    case sequencedMessage: SequencedMessage =>
-      println(s"SequencedMessageConsumer: received:↩
-      $sequencedMessage")
-      Resequencer.completedStep()
-
-    case message: Any =>
-      println(s"SequencedMessageConsumer: unexpected:↩
-      $message")
-  }
-}
-```
-
-`ResequencerConsumer`の`actualConsumer`は単純な`SequencedMessageConsumer`である。受信した各`SequencedMessage`を表示するだけで、正しいシーケンス順序で受信されていることを証明する。
-
----
-
-## 処理フロー図
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       Resequencer 処理フロー                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  1. メッセージ送信（順序通り）                                           │
-│                                                                         │
-│  ┌──────────────┐                                                       │
-│  │   Driver     │  ABC: 1,2,3,4,5                                       │
-│  │              │────────────────────▶ ChaosRouter                      │
-│  │              │  XYZ: 1,2,3,4,5                                       │
-│  └──────────────┘                                                       │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  2. 意図的な順序乱し                                                     │
-│                                                                         │
-│  ┌──────────────┐                                                       │
-│  │ ChaosRouter  │                                                       │
-│  │              │  ランダム遅延（1-100ms）後に配信                       │
-│  │ scheduler    │                                                       │
-│  │ .scheduleOnce│──────────────────▶ ResequencerConsumer               │
-│  └──────────────┘                                                       │
-│                                                                         │
-│  到着順序例: XYZ-4, ABC-3, XYZ-5, ABC-5, XYZ-1, ABC-2...                │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  3. 再シーケンス処理                                                     │
-│                                                                         │
-│  ┌──────────────────────────────────────────────────────────────┐       │
-│  │ ResequencerConsumer                                          │       │
-│  │                                                              │       │
-│  │  resequenced["ABC"] = [_, _, msg3, _, msg5]                  │       │
-│  │  resequenced["XYZ"] = [msg1, _, _, msg4, msg5]               │       │
-│  │                                                              │       │
-│  │  dispatchableIndex: 次に配信可能なインデックス               │       │
-│  │                                                              │       │
-│  │  dispatchAllSequenced():                                     │       │
-│  │    インデックス1から順番に、                                  │       │
-│  │    配信可能なメッセージをすべて送信                          │       │
-│  │                                                              │       │
-│  └──────────────────────────────────────────────────────────────┘       │
-│                                                                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  4. 正しい順序で最終配信                                                 │
-│                                                                         │
-│                          SequencedMessageConsumer                       │
-│                                    │                                    │
-│                                    ▼                                    │
-│                          ABC-1, ABC-2, ABC-3...                         │
-│                          XYZ-1, XYZ-2, XYZ-3...                         │
-│                          （正しい順序で受信）                            │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 実行結果（抜粋）
-
-```
-ChaosRouter: delaying delivery of SequencedMessage(↩
-ABC,1,5) for 14 milliseconds
-ChaosRouter: delaying delivery of SequencedMessage(↩
-ABC,2,5) for 71 milliseconds
-ChaosRouter: delaying delivery of SequencedMessage(↩
-ABC,3,5) for 1 milliseconds
-ChaosRouter: delaying delivery of SequencedMessage(↩
-XYZ,5,5) for 63 milliseconds
-...
-ResequencerConsumer: received: SequencedMessage(XYZ,4,5)
-ResequencerConsumer: received: SequencedMessage(ABC,3,5)
-ResequencerConsumer: received: SequencedMessage(XYZ,5,5)
-ResequencerConsumer: received: SequencedMessage(ABC,5,5)
-ResequencerConsumer: received: SequencedMessage(XYZ,1,5)
-ResequencerConsumer: received: SequencedMessage(ABC,2,5)
-SequencedMessageConsumer: received: SequencedMessage(↩
-XYZ,1,5)
-ResequencerConsumer: received: SequencedMessage(XYZ,2,5)
-SequencedMessageConsumer: received: SequencedMessage(↩
-XYZ,2,5)
-SequencedMessageConsumer: received: SequencedMessage(↩
-ABC,1,5)
-SequencedMessageConsumer: received: SequencedMessage(↩
-ABC,2,5)
-SequencedMessageConsumer: received: SequencedMessage(↩
-ABC,3,5)
-ResequencerConsumer: received: SequencedMessage(XYZ,3,5)
-ResequencerConsumer: removed completed: XYZ
-SequencedMessageConsumer: received: SequencedMessage(↩
-XYZ,3,5)
-SequencedMessageConsumer: received: SequencedMessage(↩
-XYZ,4,5)
-ResequencerConsumer: received: SequencedMessage(ABC,4,5)
-ResequencerConsumer: removed completed: ABC
-SequencedMessageConsumer: received: SequencedMessage(↩
-XYZ,5,5)
-SequencedMessageConsumer: received: SequencedMessage(↩
-ABC,4,5)
-SequencedMessageConsumer: received: SequencedMessage(↩
-ABC,5,5)
-Resequencer: is completed.
-```
-
-### 結果の解説
-
-- `ChaosRouter`がランダムな遅延でメッセージを順不同に配信
-- `ResequencerConsumer`がバラバラに到着するメッセージを受信
-- `SequencedMessageConsumer`には正しい順序（1,2,3,4,5）でメッセージが配信される
-- ABCとXYZはそれぞれ独立した`correlationId`で管理される
-
----
-
-## バースト配信の動作
-
-メッセージの受信順序に応じて、配信は以下のように発生する可能性がある：
-
-| パターン | 説明 |
-|---------|------|
-| **単一バースト** | インデックス5,4,3,2,1の順で受信した場合、インデックス1を見た時点で1〜5をまとめて配信 |
-| **複数バースト** | インデックス2,1,4,3,5の順で受信した場合、1を見た時点で1-2を配信、3を見た時点で3-4を配信、5を見た時点で5を配信 |
-| **1つずつ** | インデックス1,2,3,4,5の順で受信した場合、それぞれ即座に配信 |
-
----
-
-## 参照
-
-- Request-Reply (209)
-- Correlation Identifier (215)
-- Content-Based Router (228)
-- Splitter (254)
-- Scatter-Gather (272)
-- Message (130)
-- Akka-Message-Guarantees
+### 次のステップ:
+- [[aggregator|Aggregator]] - 順序復元後に集約が必要な場合
+- [[composed_message_processor|Composed Message Processor]] - 分割→処理→順序復元→集約の完全なパターン

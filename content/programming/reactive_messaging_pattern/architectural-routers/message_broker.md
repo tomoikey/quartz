@@ -1,353 +1,414 @@
-# Message Broker パターン
+# Message Broker
 
-## 概要
+## 1. 3行要約 (Feynman Technique)
+> **目的:** 専門用語を避け、直感的なメタファーを用いて「何をするものか」を定義する。
+- 「郵便局の中央仕分けセンター」のような役割。全ての手紙が集まり、宛先を判定して配送
+- メッセージの送信元と宛先を分離しながら、メッセージフローを集中管理
+- 核心的価値：**異種システム間のメッセージルーティングの一元化**
 
-メッセージの**送信者と受信者を分離**しながら、メッセージフローの**集中制御を維持**する。
+## 2. 解決する課題 (Context & Problem)
+> **目的:** 「なぜこれが必要なのか？」という文脈（Pain Point）を明確にする。
 
-Message Broker は主に**統合が必要な異種アプリケーション間**でメッセージをルーティングすることに関係している。
+- **Before:**
+  - 複数のアプリケーション間でメッセージをルーティングする必要がある
+  - 各アプリケーションが他の全てのアプリケーションを知る必要がある
+  - 異なるデータフォーマット間の変換が必要
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      Message Broker パターン                            │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│         ○───○                                                          │
-│          \ /                                                            │
-│           ●  ← Local Message Broker                                    │
-│          / \                                                            │
-│         ○   ○                                                          │
-│                                                                         │
-│   「サブネット」: 単一の Message Broker の制御下にある                   │
-│                  アプリケーションのグループ                             │
-│                                                                         │
-│   Centralized Message Broker を使用することで、                         │
-│   あるサブネットのアプリケーションから                                   │
-│   別のサブネットのアプリケーションへメッセージを配信可能                 │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+- **Trigger:**
+  - メッセージの送信元と宛先を分離したい
+  - ルーティングロジックを一元管理したい
+  - 異種アプリケーション間の統合を実現したい
 
----
+## 3. ソリューションと構造 (Structure & Visual)
+> **目的:** Dual Coding（文字と図）により記憶定着を図る。
 
-## Figure 7.12: 3つのサブネットを持つ Central Message Broker
+### 仕組み
+中央のMessage Brokerが：
+1. 複数の送信元からメッセージを受信
+2. 適切な宛先を判定
+3. 必要に応じてメッセージを変換
+4. 宛先にルーティング
 
-```
-                                    ○
-                                    │
-                              ○─────●─────○
-                                    │
-                                    │
-                         ┌──────────●──────────┐
-                         │   Central Message   │
-                         │       Broker        │
-                         └──────────┬──────────┘
-                        /           │           \
-                       /            │            \
-        ┌─────────────┐      ┌─────────────┐      ┌─────────────┐
-        │   subnet    │      │   subnet    │      │   subnet    │
-        └─────────────┘      └─────────────┘      └─────────────┘
-              │                    │                    │
-         ○    │    ○          ○    │    ○          ○    │    ○
-          \   │   /            \   │   /            \   │   /
-           \  │  /              \  │  /              \  │  /
-        ○───[●]───○          ○───[●]───○          ○───[●]───○
-           /  │  \              /  │  \              /  │  \
-          /   │   \            /   │   \            /   │   \
-         ○    │    ○          ○    │    ○          ○    │    ○
-              │                    │                    │
-         Local Message        Local Message        Local Message
-            Broker               Broker               Broker
+### ハブ・アンド・スポーク構造
 
-        [●] = Message Broker
-         ○  = アプリケーション
+```mermaid
+graph TB
+    subgraph "Message Broker Architecture"
+        A1[App A] --> MB{Message<br/>Broker}
+        A2[App B] --> MB
+        A3[App C] --> MB
+        MB --> A4[App D]
+        MB --> A5[App E]
+        MB --> A6[App F]
+    end
+
+    style MB fill:#ffcc80
 ```
 
----
+### 階層構造（サブネット）
 
-## Message Broker の根本的な問題
+```mermaid
+graph TB
+    subgraph "Central"
+        CMB{Central<br/>Message Broker}
+    end
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        2つの根本的な問題                                │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  1. ルーティングボトルネック                                            │
-│     ┌─────────────────────────────────────────────────────────────┐    │
-│     │  すべてのメッセージがブローカーを通過する必要がある          │    │
-│     └─────────────────────────────────────────────────────────────┘    │
-│                                                                         │
-│  2. メッセージ変換ボトルネック                                          │
-│     ┌─────────────────────────────────────────────────────────────┐    │
-│     │  アプリケーションフォーマット間の変換が必要                  │    │
-│     │                                                              │    │
-│     │  例: Figure 7.12 には16のアプリケーションが存在              │    │
-│     │      → 最大 16² = 256 のデータフォーマット変換器が必要       │    │
-│     └─────────────────────────────────────────────────────────────┘    │
-│                                                                         │
-│  ※ すべてのアプリケーションが他のすべてと統合する必要がないように       │
-│    見えても、長年のビジネス改善でその可能性は排除できない               │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+    subgraph "Subnet 1"
+        LB1{Local<br/>Broker 1}
+        S1A[App A]
+        S1B[App B]
+        S1A --> LB1
+        S1B --> LB1
+    end
 
----
+    subgraph "Subnet 2"
+        LB2{Local<br/>Broker 2}
+        S2A[App C]
+        S2B[App D]
+        S2A --> LB2
+        S2B --> LB2
+    end
 
-## EAI（Enterprise Application Integration）ツール
+    LB1 <--> CMB
+    LB2 <--> CMB
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         EAI ツールの役割                                │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ボトルネック対策:                                                      │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  ブローカー内のメッセージレシーバーを水平スケーリング           │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  データフォーマット変換:                                                │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  ・既知ベンダーの商用アプリケーション用の変換器を提供           │   │
-│  │  ・社内エンタープライズアプリケーション用は                      │   │
-│  │    ライセンス取得後にカスタム開発が必要                         │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  → 次章で Message Transformation パターンを解説                         │
-│    独自のメッセージデータフォーマット変換器を開発する方法を提供         │
-│    EAI ツールを拒否する傾向に対して有効な選択肢                         │
-└─────────────────────────────────────────────────────────────────────────┘
+    style CMB fill:#ffcc80
+    style LB1 fill:#a5d6a7
+    style LB2 fill:#a5d6a7
 ```
 
----
+## 4. トレードオフと制約 (Critical Thinking)
 
-## SOA と Service Autonomy
+### Pros (利点):
+- **疎結合**: 送信元と宛先が互いを知らなくて良い
+- **一元管理**: ルーティングルールを中央で管理
+- **変換**: 異なるデータフォーマット間の変換を一箇所で実施
+- **監視**: メッセージフローの可視化と監査
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    SOA (Service-Oriented Architecture)                  │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  SOA = サービス実装時の推奨ガイダンスとなる                             │
-│        アーキテクチャと設計原則のセット                                 │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  Service Autonomy（サービス自律性）                             │   │
-│  │  ─────────────────────────────────────────────────────────────  │   │
-│  │  自律的なサービスは以下にのみ依存する:                          │   │
-│  │    ・自身のサービス入出力コントラクト                           │   │
-│  │    ・内部実装                                                   │   │
-│  │    ・そのデータ                                                 │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  問題点:                                                                │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  ツールベンダーは SOA 原則の遵守より販売に興味がある            │   │
-│  │  → EAI ツールは Service Autonomy をサポートするのではなく       │   │
-│  │    Message Broker を中心としたサービス制御の集中化を引き起こす  │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  この理由により、本書では具体的な実装例を強調していない                 │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+### Cons (欠点・副作用):
+- **ボトルネック**: 全メッセージが中央を通過
+- **単一障害点**: ブローカー障害時に全システムが影響
+- **複雑性**: 変換器の数がN²に増加する可能性
+- **レイテンシ**: 間接経路によるオーバーヘッド
 
----
+### スケーリング対策
 
-## Message Broker を学ぶためのリソース
+| 対策 | 説明 |
+|-----|------|
+| **ステートレス設計** | 複数インスタンスの並行配置が可能 |
+| **機能分割** | 複数のBrokerを機能ごとに分割 |
+| **階層化** | ローカルBrokerとセントラルBrokerの組み合わせ |
 
-本書の以下のパターンが良いサンプルを提供：
+### Message Busとの比較
 
-| パターン | ページ | 備考 |
-|---------|--------|------|
-| Message Bus | 192 | Message Broker に類似 |
-| Process Manager | 292 | 直接的な実装例 |
+| 観点 | Message Broker | Message Bus |
+|-----|---------------|-------------|
+| 構造 | ハブ・アンド・スポーク | 共有チャネル |
+| 階層化 | 可能 | 困難 |
+| 制御 | 集中 | 分散 |
+| スケール | 階層化で対応 | 水平スケール |
 
-**トレンド**: 大規模でモノリシックな Message Brokers、Message Buses、Process Managers から**離れる傾向**にある。本書の実装は直接的で、銀行ローン見積りのコンセプトに明確に焦点を当てている。アクターアプリケーションを設計する際には、同様の Process Manager を作成する必要がある。
+### Anti-Pattern:
+- 全てのメッセージングにMessage Brokerを使用（過剰設計）
+- スケーリングを考慮しない単一Broker設計
+- 変換ロジックの肥大化
 
----
+## 5. 実装イメージ (Implementation)
 
-## Message Broker と Message Bus の比較
+### アーキテクチャ例
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                   Message Broker vs Message Bus                         │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                        類似点                                   │   │
-│  ├─────────────────────────────────────────────────────────────────┤   │
-│  │  ・Message Bus (192) は特殊化された Message Channel (128)       │   │
-│  │                                                                 │   │
-│  │  ・焦点: あるチャネル上のメッセージを別のチャネルに切り替える   │   │
-│  │    方法                                                         │   │
-│  │                                                                 │   │
-│  │  ・Message Router (140) がメッセージの配信先チャネルを決定      │   │
-│  │                                                                 │   │
-│  │  ・Message Bus に送信されたメッセージは、バスに興味を登録した   │   │
-│  │    アクターにルーティングされる必要がある                       │   │
-│  │                                                                 │   │
-│  │  ・Message Bus はルーティングルールを維持・実行する手段を提供   │   │
-│  │                                                                 │   │
-│  │  ・両方とも Canonical Message Model (333) に依存                │   │
-│  │                                                                 │   │
-│  │  ・両方とも Content-Based Router (228) の一種                   │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │                        相違点                                   │   │
-│  ├─────────────────────────────────────────────────────────────────┤   │
-│  │  ・Message Broker は階層化が可能                                │   │
-│  │                                                                 │   │
-│  │  ・Message Bus を使用して、集中化された Message Bus トラフィッカー│   │
-│  │    を介して、サブネット間でメッセージをルーティングする設計も可能│   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  相違点は少なく、調整可能                                               │
-│  → バスもブローカーと同様に否定的に見なされる可能性がある               │
-└─────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│                    Message Broker                       │
+├────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐    │
+│  │  Receiver   │  │  Receiver   │  │  Receiver   │    │
+│  │  (App A)    │  │  (App B)    │  │  (App C)    │    │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘    │
+│         │                │                │            │
+│         v                v                v            │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │              Message Transformer                 │  │
+│  │         (Canonical Data Model変換)               │  │
+│  └──────────────────────┬──────────────────────────┘  │
+│                          │                             │
+│                          v                             │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │            Content-Based Router                  │  │
+│  │           (ルーティングルール適用)                │  │
+│  └─────────┬─────────────┬─────────────┬───────────┘  │
+│            │             │             │              │
+│            v             v             v              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
+│  │  Sender     │  │  Sender     │  │  Sender     │   │
+│  │  (App X)    │  │  (App Y)    │  │  (App Z)    │   │
+│  └─────────────┘  └─────────────┘  └─────────────┘   │
+│                                                        │
+└────────────────────────────────────────────────────────┘
 ```
 
----
+### Akka Typed Actor (Scala)
 
-## データフォーマット変換
+```scala
+import akka.actor.typed.{ActorRef, Behavior}
+import akka.actor.typed.scaladsl.Behaviors
 
+// ドメインモデル（各アプリケーション固有のフォーマット）
+sealed trait AppMessage
+case class AppAMessage(orderId: String, customerName: String, amount: Double) extends AppMessage
+case class AppBMessage(invoiceNo: String, vendor: String, total: Double) extends AppMessage
+case class AppCMessage(data: String) extends AppMessage
+
+// Canonical Data Model（共通フォーマット）
+sealed trait CanonicalMessage {
+  def messageType: String
+  def correlationId: String
+}
+
+case class CanonicalOrder(
+  correlationId: String,
+  orderId: String,
+  customer: String,
+  amount: Double
+) extends CanonicalMessage {
+  val messageType = "ORDER"
+}
+
+case class CanonicalInvoice(
+  correlationId: String,
+  invoiceId: String,
+  vendor: String,
+  total: Double
+) extends CanonicalMessage {
+  val messageType = "INVOICE"
+}
+
+case class CanonicalGeneric(
+  correlationId: String,
+  payload: String
+) extends CanonicalMessage {
+  val messageType = "GENERIC"
+}
+
+// Message Broker
+object MessageBroker {
+  sealed trait Command
+  case class Route(message: AppMessage) extends Command
+  case class RegisterDestination(
+    messageType: String,
+    destination: ActorRef[CanonicalMessage]
+  ) extends Command
+
+  def apply(): Behavior[Command] =
+    broker(Map.empty)
+
+  private def broker(
+    destinations: Map[String, ActorRef[CanonicalMessage]]
+  ): Behavior[Command] =
+    Behaviors.receive { (context, command) =>
+      command match {
+        // 宛先の登録
+        case RegisterDestination(messageType, destination) =>
+          context.log.info(s"Registered destination for $messageType")
+          broker(destinations + (messageType -> destination))
+
+        // メッセージのルーティング
+        case Route(message) =>
+          context.log.info(s"Routing message: $message")
+
+          // 1. Canonical Data Modelに変換
+          val canonical = transformToCanonical(message)
+          context.log.info(s"Transformed to: ${canonical.messageType}")
+
+          // 2. Content-Based Routing
+          destinations.get(canonical.messageType) match {
+            case Some(destination) =>
+              context.log.info(s"Routing ${canonical.messageType} to destination")
+              destination ! canonical
+
+            case None =>
+              // デフォルトハンドラへ
+              destinations.get("DEFAULT").foreach { defaultDest =>
+                context.log.info(s"Routing to default handler")
+                defaultDest ! canonical
+              }
+          }
+
+          Behaviors.same
+      }
+    }
+
+  // Canonical Data Modelへの変換
+  private def transformToCanonical(message: AppMessage): CanonicalMessage = {
+    message match {
+      case AppAMessage(orderId, customerName, amount) =>
+        CanonicalOrder(
+          correlationId = java.util.UUID.randomUUID().toString,
+          orderId = orderId,
+          customer = customerName,
+          amount = amount
+        )
+
+      case AppBMessage(invoiceNo, vendor, total) =>
+        CanonicalInvoice(
+          correlationId = java.util.UUID.randomUUID().toString,
+          invoiceId = invoiceNo,
+          vendor = vendor,
+          total = total
+        )
+
+      case AppCMessage(data) =>
+        CanonicalGeneric(
+          correlationId = java.util.UUID.randomUUID().toString,
+          payload = data
+        )
+    }
+  }
+}
+
+// 宛先アプリケーション（Canonical → アプリ固有フォーマットに変換）
+object OrderProcessor {
+  case class AppXOrder(id: String, customerInfo: String, totalAmount: Double)
+
+  def apply(): Behavior[CanonicalMessage] =
+    Behaviors.receive { (context, message) =>
+      message match {
+        case order: CanonicalOrder =>
+          // App X固有のフォーマットに変換
+          val appXOrder = AppXOrder(
+            id = order.orderId,
+            customerInfo = s"Customer: ${order.customer}",
+            totalAmount = order.amount
+          )
+          context.log.info(s"OrderProcessor received: $appXOrder")
+          // App Xへ送信（実際はキューやHTTPなど）
+
+        case other =>
+          context.log.warn(s"Unexpected message type: ${other.messageType}")
+      }
+      Behaviors.same
+    }
+}
+
+object InvoiceProcessor {
+  case class AppYInvoice(number: String, vendorName: String, amount: Double)
+
+  def apply(): Behavior[CanonicalMessage] =
+    Behaviors.receive { (context, message) =>
+      message match {
+        case invoice: CanonicalInvoice =>
+          // App Y固有のフォーマットに変換
+          val appYInvoice = AppYInvoice(
+            number = invoice.invoiceId,
+            vendorName = invoice.vendor,
+            amount = invoice.total
+          )
+          context.log.info(s"InvoiceProcessor received: $appYInvoice")
+          // App Yへ送信
+
+        case other =>
+          context.log.warn(s"Unexpected message type: ${other.messageType}")
+      }
+      Behaviors.same
+    }
+}
+
+object DefaultProcessor {
+  def apply(): Behavior[CanonicalMessage] =
+    Behaviors.receive { (context, message) =>
+      context.log.info(s"DefaultProcessor received: ${message.messageType}")
+      Behaviors.same
+    }
+}
+
+// 階層化されたMessage Broker（サブネット構成）
+object LocalBroker {
+  sealed trait Command
+  case class Route(message: AppMessage) extends Command
+
+  def apply(
+    centralBroker: ActorRef[MessageBroker.Command],
+    localProcessors: Map[String, ActorRef[CanonicalMessage]]
+  ): Behavior[Command] =
+    Behaviors.receive { (context, command) =>
+      command match {
+        case Route(message) =>
+          // ローカルで処理可能か判定
+          val canonical = transformLocal(message)
+          localProcessors.get(canonical.messageType) match {
+            case Some(processor) =>
+              context.log.info(s"Processing locally: ${canonical.messageType}")
+              processor ! canonical
+
+            case None =>
+              // セントラルブローカーへ転送
+              context.log.info(s"Forwarding to central: ${canonical.messageType}")
+              centralBroker ! MessageBroker.Route(message)
+          }
+          Behaviors.same
+      }
+    }
+
+  private def transformLocal(message: AppMessage): CanonicalMessage = {
+    // 簡易変換（実際はMessageBrokerと同様の変換ロジック）
+    message match {
+      case AppAMessage(orderId, _, _) =>
+        CanonicalOrder(orderId, orderId, "", 0)
+      case AppBMessage(invoiceNo, _, _) =>
+        CanonicalInvoice(invoiceNo, invoiceNo, "", 0)
+      case AppCMessage(data) =>
+        CanonicalGeneric(data, data)
+    }
+  }
+}
+
+// 使用例
+object MessageBrokerExample {
+  def apply(): Behavior[Nothing] =
+    Behaviors.setup[Nothing] { context =>
+      // 宛先プロセッサを作成
+      val orderProcessor = context.spawn(OrderProcessor(), "orderProcessor")
+      val invoiceProcessor = context.spawn(InvoiceProcessor(), "invoiceProcessor")
+      val defaultProcessor = context.spawn(DefaultProcessor(), "defaultProcessor")
+
+      // Message Brokerを作成
+      val broker = context.spawn(MessageBroker(), "broker")
+
+      // 宛先を登録
+      broker ! MessageBroker.RegisterDestination("ORDER", orderProcessor)
+      broker ! MessageBroker.RegisterDestination("INVOICE", invoiceProcessor)
+      broker ! MessageBroker.RegisterDestination("DEFAULT", defaultProcessor)
+
+      // 各アプリケーションからのメッセージをシミュレート
+      broker ! MessageBroker.Route(
+        AppAMessage("ORD-001", "John Doe", 1500.0)
+      )
+      broker ! MessageBroker.Route(
+        AppBMessage("INV-001", "Acme Corp", 2500.0)
+      )
+      broker ! MessageBroker.Route(
+        AppCMessage("Generic data payload")
+      )
+
+      Behaviors.empty
+    }
+}
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      データフォーマット変換                             │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  Message Bus (192) は Channel Adapter (183) を使用して                  │
-│  バスを使用するアプリケーション間のデータフォーマットを変換             │
-│                                                                         │
-│  ┌──────────────┐     ┌─────────────────┐     ┌──────────────┐         │
-│  │ Application  │────>│ Channel Adapter │────>│ Message Bus  │         │
-│  │   Format A   │     │   (変換器)      │     │  (共通形式)  │         │
-│  └──────────────┘     └─────────────────┘     └──────────────┘         │
-│                                                                         │
-│  これは Message Broker が必要とする機能と類似または同一                 │
-└─────────────────────────────────────────────────────────────────────────┘
-```
 
----
+## 6. リンクと関係性 (Network Knowledge)
 
-## 集中制御からの脱却トレンド
+### 構成パターン:
+- [[content_based_router|Content-Based Router]] - メッセージのルーティング
+- [[message_translator|Message Translator]] - データフォーマット変換
+- [[canonical_data_model|Canonical Data Model]] - 共通データモデル
+- [[channel_adapter|Channel Adapter]] - アプリケーション接続
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                        現在のトレンド                                   │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  集中制御を強調するソリューションから離れる傾向                  │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-│  しかし...                                                              │
-│                                                                         │
-│  ┌─────────────────────────────────────────────────────────────────┐   │
-│  │  ツールベンダーが Message Broker、Message Bus、Process Manager  │   │
-│  │  パターンを使用して、大規模で高価で遅く複雑な EAI ツールを       │   │
-│  │  作成してきたからといって、特定のエンタープライズソリューション │   │
-│  │  のために Message Broker を設計することを否定的に見るべきでは   │   │
-│  │  ない。実際、それがまさに必要なものかもしれない。               │   │
-│  └─────────────────────────────────────────────────────────────────┘   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+### 関連パターン:
+- [[message_bus|Message Bus]] (比較: 共有チャネル方式)
+- [[process_manager|Process Manager]] (組み合わせ: フロー制御)
+- [[pipes_and_filters|Pipes and Filters]] (基盤: 処理パイプライン)
 
----
-
-# チャプターサマリー
-
-## 本章で学んだリアクティブルーター
-
-Domain-Driven Design [IDDD] アプローチでアクターをモデリングする際に、特に頻繁に使用するパターン：
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     主要なルーティングパターン                          │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   ┌─────────────────────┐    ┌─────────────────────┐                   │
-│   │  Process Managers   │    │    Aggregators      │                   │
-│   │       (292)         │    │       (257)         │                   │
-│   └─────────────────────┘    └─────────────────────┘                   │
-│                                                                         │
-│   ┌─────────────────────┐    ┌─────────────────────┐                   │
-│   │   Scatter-Gather    │    │    Routing Slip     │                   │
-│   │       (272)         │    │       (285)         │                   │
-│   └─────────────────────┘    └─────────────────────┘                   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
-## その他の重要なツール
-
-アプリケーション設計とエンタープライズ統合の両方で重要な役割を果たす：
-
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                     その他のルーティングパターン                        │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                         │
-│   ┌─────────────────────┐    ┌─────────────────────┐                   │
-│   │   Message Filter    │    │   Recipient List    │                   │
-│   │       (232)         │    │       (245)         │                   │
-│   └─────────────────────┘    └─────────────────────┘                   │
-│                                                                         │
-│   ┌─────────────────────┐    ┌─────────────────────┐                   │
-│   │     Splitter        │    │    Resequencer      │                   │
-│   │       (254)         │    │       (264)         │                   │
-│   └─────────────────────┘    └─────────────────────┘                   │
-│                                                                         │
-└─────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## パターン関連図
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                         本章のパターン関連図                                 │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-                    ┌─────────────────────────────────────┐
-                    │        Message Broker               │
-                    │     (アーキテクチャスタイル)         │
-                    └──────────────────┬──────────────────┘
-                                       │
-                                       │ 実装に使用
-                                       │
-            ┌──────────────────────────┼──────────────────────────┐
-            │                          │                          │
-            v                          v                          v
-   ┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
-   │  Message Bus    │      │ Process Manager │      │  その他の       │
-   │     (192)       │      │     (292)       │      │ ルーティング    │
-   └────────┬────────┘      └────────┬────────┘      │ パターン        │
-            │                        │                └─────────────────┘
-            │                        │
-            v                        v
-   ┌─────────────────────────────────────────────────────────────────┐
-   │                    共通の依存関係                                │
-   ├─────────────────────────────────────────────────────────────────┤
-   │  ・Canonical Message Model (333)                                │
-   │  ・Content-Based Router (228)                                   │
-   │  ・Channel Adapter (183) - データフォーマット変換               │
-   │  ・Message Channel (128)                                        │
-   │  ・Message Router (140)                                         │
-   └─────────────────────────────────────────────────────────────────┘
-
-
-   ┌─────────────────────────────────────────────────────────────────┐
-   │               Routing Slip vs Process Manager                   │
-   ├─────────────────────────────────────────────────────────────────┤
-   │                                                                 │
-   │   Routing Slip (285)          Process Manager (292)            │
-   │   ┌─────────────────┐         ┌─────────────────┐              │
-   │   │  固定・線形     │         │  動的・非線形   │              │
-   │   │  条件分岐なし   │  ───>   │  条件分岐あり   │              │
-   │   │  ループなし     │  拡張   │  ループあり     │              │
-   │   │  並列処理なし   │         │  並列処理あり   │              │
-   │   └─────────────────┘         └─────────────────┘              │
-   │                                                                 │
-   │   シンプルな直列処理には      複雑なフロー制御が                │
-   │   Routing Slip を選択        必要な場合に選択                  │
-   └─────────────────────────────────────────────────────────────────┘
-```
+### 次のステップ:
+- [[message_translator|Message Translator]] - メッセージ変換の詳細
+- [[process_manager|Process Manager]] - 複雑なフロー制御が必要な場合
