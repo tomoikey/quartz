@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.enterpriseintegrationpatterns.com)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nConvert EIP implementation examples to Akka Typed Actor \\(Scala\\)\n\nUpdated all reactive messaging pattern notes to use Akka Typed Actor\nimplementations instead of Apache Camel/Spring Integration.\n\nPatterns updated:\n- Pipes and Filters, Message Broker \\(architectural\\)\n- Message Router, Content-Based Router, Dynamic Router,\n  Message Filter, Recipient List, Splitter, Aggregator,\n  Resequencer \\(simple routers\\)\n- Composed Message Processor, Scatter-Gather, Routing Slip,\n  Process Manager \\(composed routers\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
+    ]
+  }
+}
