@@ -83,7 +83,7 @@ graph TB
 
 | パターン | 何をするか | 具体例 |
 |---------|-----------|-------|
-| [[programming/reactive_messaging_pattern/simple-routers/message_router\|Message Router]] | 条件に基づいてメッセージを1つの宛先に振り分ける、最も基本的なパターン。他のルーティングパターンの土台となる概念 | 交差点の交通整理員が車を振り分ける |
+| [[programming/reactive_messaging_pattern/simple-routers/message_router\|Message Router]] | 条件に基づいてメッセージを1つの宛先に振り分ける、最も基本的なパターン。他のルーティングパターンの土台となる概念 | 注文の種類（通常/返品/法人）に応じて異なる処理システムに振り分ける |
 | [[programming/reactive_messaging_pattern/simple-routers/content_based_router\|Content-Based Router]] | メッセージの中身（フィールドの値など）を見て宛先を決める。最も一般的に使われるルーター | 注文の商品カテゴリを見て、適切な倉庫システムに振り分ける |
 | [[programming/reactive_messaging_pattern/simple-routers/message_filter\|Message Filter]] | 条件に合わないメッセージを破棄して、条件に合うメッセージだけを通過させる | テスト用メッセージを本番環境から除去する |
 | [[programming/reactive_messaging_pattern/simple-routers/dynamic_router\|Dynamic Router]] | ルーティングルールを実行時に動的に変更できる。外部からルールを設定・更新可能 | A/Bテストで一部のトラフィックだけを新システムに流す |
