@@ -1,5 +1,20 @@
 # Polling Consumer
 
+## パターンの概要
+
+```mermaid
+sequenceDiagram
+    participant C as Consumer
+    participant CH as Channel
+
+    C->>CH: receive()
+    Note over C: ブロックして待機
+    CH-->>C: Message
+    C->>C: 処理
+    C->>CH: receive()
+    CH-->>C: Message
+```
+
 ## EIPにおけるPolling Consumer
 
 Polling Consumerは、アプリケーションが明示的にメッセージ受信要求を行うメッセージ消費方式である。

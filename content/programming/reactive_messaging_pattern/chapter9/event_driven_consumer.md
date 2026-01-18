@@ -1,5 +1,20 @@
 # Event-Driven Consumer
 
+## パターンの概要
+
+```mermaid
+sequenceDiagram
+    participant S as Sender
+    participant CH as Channel
+    participant C as Consumer
+
+    S->>CH: Message
+    Note over CH: メッセージ到着
+    CH->>C: callback(Message)
+    Note over C: 自動的に起動
+    C->>C: 処理
+```
+
 ## EIPにおけるEvent-Driven Consumer
 
 Event-Driven Consumerは、メッセージングシステムによってメッセージがコンシューマーのチャネルに到着すると自動的に呼び出されるオブジェクトである。

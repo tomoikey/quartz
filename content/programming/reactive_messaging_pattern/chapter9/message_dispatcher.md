@@ -1,5 +1,17 @@
 # Message Dispatcher
 
+## パターンの概要
+
+```mermaid
+graph LR
+    CH[Channel] --> D[Dispatcher]
+    D --> P1[Performer 1]
+    D --> P2[Performer 2]
+    D --> P3[Performer 3]
+
+    style D fill:#ffcc80
+```
+
 ## EIPにおけるMessage Dispatcher
 
 Message Dispatcherは、チャネルからメッセージを取得してパフォーマーに配信するパターンである。

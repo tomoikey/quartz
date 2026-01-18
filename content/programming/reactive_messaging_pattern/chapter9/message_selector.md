@@ -1,5 +1,17 @@
 # Selective Consumer (Message Selector)
 
+## パターンの概要
+
+```mermaid
+graph LR
+    S[Sender] -->|Message with<br/>selection value| CH[Channel]
+    CH --> SC[Selective<br/>Consumer]
+    SC -->|matches criteria| PROC[Process]
+    SC -.->|doesn't match| SKIP[Skip]
+
+    style SC fill:#ffcc80
+```
+
 ## EIPにおけるSelective Consumer
 
 Selective Consumer（選別的コンシューマー）は、メッセージチャネルから特定の条件に一致するメッセージのみを受け取るパターンである。

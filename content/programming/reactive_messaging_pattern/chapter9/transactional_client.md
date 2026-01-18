@@ -1,5 +1,36 @@
 # Transactional Client/Actor
 
+## パターンの概要
+
+```mermaid
+graph LR
+    subgraph "Transaction Boundary"
+        C[Client] -->|Message| CH[Channel]
+        CH --> R[Receiver]
+        R --> DB[(Database)]
+    end
+
+    style C fill:#e3f2fd
+    style R fill:#e3f2fd
+    style DB fill:#fff3e0
+```
+
+## EIPにおけるTransactional Client
+
+### 問題
+
+クライアントがメッセージングシステムとのトランザクションを制御するにはどうすればよいか。
+
+### 解決策
+
+Transactional Clientを実装する。クライアントのメッセージングシステムとのセッションをトランザクショナルにし、クライアントがトランザクション境界を指定できるようにする。
+
+### 特徴
+
+- 送信者も受信者もトランザクショナルに動作できる
+- 送信者はトランザクションがコミットされるまでメッセージをチャネルに追加することを遅延する
+- 受信者はトランザクションがコミットされるまでメッセージをチャネルから削除することを遅延する
+
 ## クライアントと受信側両方でのトランザクション
 
 Transactional Clientパターンは、Akkaアクターで使用される場合、クライアントアクターと受信側アクターの両方でのトランザクションに関するものである。アクターモデルでの使用目的のため、このパターンはTransactional Client/Actorと名付けられている。

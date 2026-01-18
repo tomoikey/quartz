@@ -1,5 +1,23 @@
 # Durable Subscriber
 
+## パターンの概要
+
+```mermaid
+sequenceDiagram
+    participant P as Publisher
+    participant MS as Messaging<br/>System
+    participant S as Subscriber
+
+    P->>MS: Message 1
+    Note over S: Disconnected
+    MS->>MS: Store Message 1
+    P->>MS: Message 2
+    MS->>MS: Store Message 2
+    Note over S: Reconnects
+    MS->>S: Message 1
+    MS->>S: Message 2
+```
+
 ## EIPにおけるDurable Subscriber
 
 Durable Subscriber（耐久的購読者）は、Publish-Subscribe Channel上でメッセージを受け取るアプリケーション向けの設計パターンである。

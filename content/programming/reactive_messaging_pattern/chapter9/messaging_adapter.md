@@ -1,5 +1,27 @@
 # Service Activator (Messaging Adapter)
 
+## パターンの概要
+
+```mermaid
+graph LR
+    subgraph External
+        CH[Message<br/>Channel]
+    end
+
+    SA[Service<br/>Activator]
+
+    subgraph Internal
+        SVC[Service]
+    end
+
+    CH -->|Request| SA
+    SA -->|Invoke| SVC
+    SVC -->|Response| SA
+    SA -->|Reply| CH
+
+    style SA fill:#ffcc80
+```
+
 ## EIPにおけるService Activator
 
 Service Activatorは、メッセージングチャネル上のメッセージをサービス呼び出しに接続するパターンである。

@@ -1,5 +1,45 @@
 # Messaging Gateway
 
+## パターンの概要
+
+Messaging Gatewayは、アプリケーションコードからメッセージング固有のコードをカプセル化し、ドメイン固有のメソッドを公開するパターンである。
+
+```mermaid
+graph LR
+    subgraph Application
+        APP[アプリケーション<br/>コード]
+    end
+
+    subgraph "Messaging Gateway"
+        GW[Gateway]
+    end
+
+    subgraph "Messaging System"
+        CH[Message Channel]
+    end
+
+    APP -->|ドメイン固有の<br/>メソッド呼び出し| GW
+    GW -->|メッセージ<br/>送受信| CH
+
+    style GW fill:#ffcc80
+```
+
+## EIPにおけるMessaging Gateway
+
+### 問題
+
+アプリケーションの残りの部分からメッセージングシステムへのアクセスをどのようにカプセル化するか。
+
+### 解決策
+
+Messaging Gatewayを使用する。これはメッセージング固有のメソッド呼び出しをラップし、ドメイン固有のメソッドをアプリケーションに公開するクラスである。
+
+### 特徴
+
+- メッセージング基盤の複雑さをビジネスロジックから分離する
+- アプリケーションが低レベルのメッセージング詳細を処理する必要がなくなる
+- ビジネスに適したメソッド（例：`GetCreditScore`）を通じてクリーンなインターフェースを提供する
+
 ## Akkaにおける自然なMessaging Gateway
 
 Akkaアクターシステムとそのアクターは、自然なMessaging Gatewayを形成する。Akkaはアクター間のメッセージ送信をシンプルにする。ほとんどの場合、Akkaやそのアクターの上に別の抽象化レイヤーを作成してメッセージングへのアクセスを簡素化する必要はない。同じJVM内の他のアクターにメッセージを送信する場合も、別のJVM内のリモートアクターに送信する場合も、インターフェースは同様にシンプルである。
@@ -23,6 +63,16 @@ Akkaが標準では「そのまま」提供しない機能を実装したい場�
 `DomainModel`インスタンスを作成した後、`Order`型が`DomainModel`にAggregate型として登録される。次に、`DomainModel`にAggregateアクターインスタンスの提供を依頼できる。`DomainModel`は新しい`Order`アクター参照インスタンスを生成し、Entityのグローバル一意のアイデンティティ"123"が割り当てられる。これはシンプルな`Order` Aggregateアクターであり、最終的にメッセージを受信するアクターを提供する以外、特に重要なことはしない。
 
 ## AggregateRef：Messaging Gatewayの要
+
+```mermaid
+graph LR
+    CLIENT[Client] -->|message| AREF[AggregateRef<br/>Gateway]
+    AREF -->|CacheMessage| CACHE[AggregateCache]
+    CACHE -->|actualMessage| AGG[Aggregate<br/>Actor]
+
+    style AREF fill:#ffcc80
+    style CACHE fill:#e1bee7
+```
 
 `DomainModel`の`aggregateOf()`関数が返す`Order`アクター参照は、馴染みのある`ActorRef`ではないことに注意が必要である。代わりに、特別な型`AggregateRef`である。この`AggregateRef`は`ActorRef`のように使用されるが、トランジェントAggregateアクターを実装するためのMessaging Gateway抽象化の要（linchpin）として機能する。
 
@@ -52,7 +102,11 @@ aggregate.tell(message.actualMessage, message.sender)
 
 ## 関連パターン
 
-Aggregateなど、送信されたメッセージを必ず受信しなければならないアクターを確保する方法については、Guaranteed Deliveryを参照。
+| パターン | 関係 |
+|---------|------|
+| [[programming/reactive_messaging_pattern/chapter9/messaging_mapper\|Messaging Mapper]] | メッセージとドメインオブジェクト間のマッピングを行う |
+| [[programming/reactive_messaging_pattern/chapter9/messaging_adapter\|Service Activator]] | メッセージをサービス呼び出しに接続する |
+| Guaranteed Delivery | 送信されたメッセージが必ず受信されることを保証する |
 
 ## 参考資料
 

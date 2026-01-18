@@ -1,5 +1,21 @@
 # Idempotent Receiver
 
+## パターンの概要
+
+```mermaid
+sequenceDiagram
+    participant S as Sender
+    participant R as Idempotent<br/>Receiver
+
+    S->>R: Message (ID: 123)
+    R->>R: Process & Store ID
+    R-->>S: Ack
+
+    S->>R: Message (ID: 123)
+    Note over R: Duplicate detected
+    R-->>S: Ack (no reprocess)
+```
+
 ## EIPにおけるIdempotent Receiver
 
 Idempotent Receiver（冪等受信者）は、同じメッセージを複数回受信しても安全に処理できる受信者を設計するパターンである。

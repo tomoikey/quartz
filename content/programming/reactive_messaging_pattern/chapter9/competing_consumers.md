@@ -1,5 +1,17 @@
 # Competing Consumers
 
+## パターンの概要
+
+```mermaid
+graph LR
+    S[Sender] --> CH[Point-to-Point<br/>Channel]
+    CH --> C1[Consumer 1]
+    CH --> C2[Consumer 2]
+    CH --> C3[Consumer 3]
+
+    style CH fill:#ffcc80
+```
+
 ## EIPにおけるCompeting Consumers
 
 Competing Consumersは、複数のコンシューマーが単一のPoint-to-Point Channelからメッセージを受け取るために作成されるパターンである。
