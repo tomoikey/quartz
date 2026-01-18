@@ -2,64 +2,128 @@
 
 ## パターンの概要
 
-```mermaid
-sequenceDiagram
-    participant S as Sender
-    participant CH as Channel
-    participant C as Consumer
-
-    S->>CH: Message
-    Note over CH: メッセージ到着
-    CH->>C: callback(Message)
-    Note over C: 自動的に起動
-    C->>C: 処理
-```
+Event-Driven Consumerは、メッセージの到着がイベントとしてコンシューマーを起動する消費方式です。コンシューマーは明示的にメッセージを要求するのではなく、メッセージングシステムがメッセージをコンシューマーのコールバックに渡します。このパターンは「非同期受信者（Asynchronous Receiver）」とも呼ばれ、コンシューマーはコールバックスレッドがメッセージを配信するまでアクティブなスレッドを持ちません。
 
 ## EIPにおけるEvent-Driven Consumer
 
-Event-Driven Consumerは、メッセージングシステムによってメッセージがコンシューマーのチャネルに到着すると自動的に呼び出されるオブジェクトである。
+### 解決すべき問題
 
-### 問題
+アプリケーションがメッセージを消費する必要がありますが、**メッセージが到着したらすぐに自動的に処理を開始したい**という要件があります。
 
-アプリケーションは利用可能になった直後にメッセージを自動的に消費する必要がある。どのようにしてアプリケーションが配信されたメッセージを自動的に消費できるか。
+例えば、以下のようなシナリオを考えてみましょう。
+
+**リアルタイム処理システム**では、メッセージが到着したらできるだけ早く処理を開始したい場合があります。注文が入ったらすぐに処理を開始する、イベントが発生したらすぐに通知を送るといったケースです。
+
+**リソース効率が重要なシステム**では、メッセージがない間はスレッドを消費せず、メッセージが到着したときだけ処理スレッドを使用したい場合があります。
+
+**イベント駆動アーキテクチャ**では、システム全体がイベント（メッセージ）の発生に反応して動作するように設計されており、各コンポーネントはイベントを待ち受けて処理します。
 
 ### 解決策
 
-Event-Driven Consumerを使用する。これは、チャネルで配信されたメッセージが自動的に渡されるものである。このパターンは非同期レシーバーとしても知られており、メッセージの配信がイベントとして機能し、レシーバーを起動する。
+**Event-Driven Consumer**を使用し、メッセージングシステムが到着したメッセージを自動的にコンシューマーに渡すようにします。
 
-### 特徴
+Event-Driven Consumerでは、コンシューマーはメッセージングシステムにコールバック（ハンドラー）を登録します。メッセージがコンシューマーのチャネルに到着すると、メッセージングシステムはこのコールバックを呼び出し、メッセージを引数として渡します。コンシューマーのコードは、メッセージを処理してから制御を返します。
 
-- メッセージ到着時に自動的に呼び出される
-- アクティブなスレッドがない状態で休止できる
-- メッセージシステムがコールバック経由でアプリケーションにメッセージを渡す
+### Event-Driven Consumerの動作特性
+
+**非同期的な受信方式**として、コンシューマーはコールバックスレッドがメッセージを配信するまでアクティブなスレッドを持ちません。これにより、メッセージがない間のリソース消費を最小限に抑えられます。
+
+**メッセージ到着がトリガー**として、メッセージの配信がイベントとして機能し、コンシューマーを「起動」します。Polling Consumerのようにコンシューマーがメッセージを要求するのではなく、メッセージがコンシューマーに「プッシュ」されます。
+
+**コールバック方式**として、メッセージングシステムはコールバック経由でアプリケーションにメッセージを渡します。アプリケーションは、メッセージを処理するハンドラー関数を提供し、メッセージングシステムはメッセージが到着するたびにこのハンドラーを呼び出します。
+
+## 「Event-Driven」という名前の意味
+
+### よくある誤解
+
+「Event-Driven Consumer」という名前を聞くと、このパターンがEvent Message（イベントメッセージ）を消費するためのものだと思われがちです。しかし、これは誤解です。
+
+Event-Driven Consumerを「event-driven」たらしめているのは、**受信するメッセージの種類ではなく、コンシューマーの動作方式**です。コンシューマーはCommand Message、Document Message、Event Messageなど、あらゆる種類のメッセージを受信できます。
+
+### Polling Consumerとの対比
+
+「event-driven」という用語は、**「polling」との対比**で使用されています。
+
+**Polling Consumer**では、コンシューマーが明示的にメッセージを要求します。コンシューマーが主導権を握り、「新しいメッセージはありますか？」と問い合わせます。
+
+**Event-Driven Consumer**では、メッセージの到着がコンシューマーを起動する「イベント」として機能します。メッセージングシステムが主導権を握り、メッセージをコンシューマーに「プッシュ」します。
+
+つまり、「event-driven」は「メッセージの到着というイベントに駆動される」という意味であり、「Event Messageを処理する」という意味ではありません。
+
+## Polling ConsumerとEvent-Driven Consumerの比較
+
+これら二つのパターンは、メッセージ消費の基本的なアプローチにおいて対照的です。
+
+**メッセージ取得方式の違い**として、Polling Consumerはコンシューマーが明示的にメッセージを要求する「プル」方式ですが、Event-Driven Consumerはメッセージングシステムがメッセージをコンシューマーに配信する「プッシュ」方式です。
+
+**スレッド使用の違い**として、Polling Consumerはポーリング中にスレッドを使用し、メッセージを待っている間もスレッドがブロックされる可能性があります。Event-Driven Consumerはメッセージ到着時のみスレッドを使用し、メッセージがない間はスレッドを消費しません。
+
+**制御の主体の違い**として、Polling Consumerではコンシューマーがメッセージ取得のタイミングを制御しますが、Event-Driven Consumerではメッセージングシステムがメッセージ配信のタイミングを制御します。
+
+**レイテンシの違い**として、Polling Consumerはポーリング間隔に依存するため、メッセージ到着からポーリングまでの待機時間が発生する可能性があります。Event-Driven Consumerはメッセージ到着時にすぐにコールバックが呼び出されるため、一般的に低レイテンシです。
 
 ## アクターモデルにおけるEvent-Driven Consumer
 
-アクターモデルにおけるアクターは自然にEvent-Driven Consumersであり、各アクターのメールボックスがPoint-to-Point Channelとして機能する。アクターは直接的な非同期メッセージングを使用するため、別のアクターからメッセージを送信されたアクターは、そのメッセージを非同期に消費する。
+### アクターは自然なEvent-Driven Consumer
 
-### 「Event-Driven」の意味
+アクターモデルにおけるアクターは、**自然にEvent-Driven Consumers**として機能します。
 
-Event-Driven Consumerを作るのは、必ずしもEvent Messageであるわけではない。Command MessageやDocument Messageであっても構わない。アクターがあらゆる種類のメッセージを受信したときにリアクティブであるという事実が、それをEvent-Driven Consumerにするのである。
+アクターは、他のアクターからメッセージが送信されると、そのメッセージを非同期に受信して処理します。各アクターのメールボックスがPoint-to-Point Channelとして機能し、メッセージが到着するとアクターの受信ハンドラーが呼び出されます。
 
-したがって、「event-driven」という用語は、コンシューマーが受信しているメッセージの種類を説明するためではなく、「polling」と対比して使用される。ポーリングでは、コンシューマーが明示的にメッセージを要求するが、event-drivenでは、メッセージの到着がコンシューマーを起動する「イベント」として機能する。
+このメカニズムは、Event-Driven Consumerパターンの本質そのものです。
 
-### Polling ConsumerとEvent-Driven Consumerの違い
+1. アクターはメッセージを待ち受けています（アクティブにポーリングしているわけではありません）
+2. メッセージが到着すると、アクターのreceiveハンドラーが呼び出されます
+3. アクターはメッセージを処理し、必要に応じて他のアクターにメッセージを送信します
+4. 処理が完了すると、アクターは次のメッセージを待ちます
 
-| 特性 | Polling Consumer | Event-Driven Consumer |
-|-----|-----------------|----------------------|
-| メッセージ取得方式 | 明示的に要求 | 自動的に配信される |
-| スレッドの使用 | ポーリング中はスレッドを使用 | メッセージ到着時のみスレッドを使用 |
-| 制御の主体 | コンシューマーが制御 | メッセージングシステムが制御 |
+### リアクティブな性質
+
+アクターがあらゆる種類のメッセージを受信したときに**リアクティブ（反応的）**であるという事実が、それをEvent-Driven Consumerにしています。
+
+アクターは、メッセージが到着するまで休眠状態にあります。メッセージが到着すると、アクターは「目覚めて」メッセージを処理します。この動作は、Event-Driven Consumerの「メッセージ到着がイベントとしてコンシューマーを起動する」という特性と完全に一致します。
+
+### アクターモデルでのEvent-Driven Consumerの利点
+
+**リソース効率**として、アクターはメッセージを処理していないときはほとんどリソースを消費しません。数百万のアクターを持つシステムでも、アクティブに処理しているアクターだけがスレッドを使用します。
+
+**スケーラビリティ**として、Event-Driven Consumerの特性により、アクターは高度にスケーラブルなシステムに適しています。メッセージが到着したときだけ処理が行われるため、システムは効率的にリソースを使用できます。
+
+**シンプルなプログラミングモデル**として、アクターを使用する場合、Event-Driven Consumerパターンは自然に実現されます。開発者は特別な設定をする必要がなく、単にアクターのreceiveハンドラーを実装するだけです。
+
+## Event-Driven Consumerの考慮事項
+
+### トランザクションとの関係
+
+Event-Driven Consumerを使用する際、トランザクション管理には注意が必要です。
+
+一部の実装では、メッセージを受信した時点で自動的に確認応答（acknowledge）が送信されます。これは、メッセージの処理が完了する前に確認応答が送信されることを意味し、処理中にエラーが発生した場合にメッセージが失われる可能性があります。
+
+信頼性が重要なシステムでは、Transactional Clientパターンを組み合わせて、メッセージの受信と処理をトランザクション境界内で行うことを検討してください。
+
+### バックプレッシャー
+
+Event-Driven Consumerでは、メッセージングシステムがメッセージをプッシュするため、コンシューマーの処理能力を超える速度でメッセージが到着する可能性があります。
+
+この問題に対処するために、以下のアプローチを検討できます。
+
+**バッファリング**として、メールボックスや内部キューでメッセージをバッファリングし、コンシューマーが処理できる速度で取り出します。ただし、バッファがあふれないように監視が必要です。
+
+**フロー制御**として、メッセージングシステムによっては、コンシューマーの処理能力に応じてメッセージの配信速度を調整する機能があります。
+
+**Competing Consumersとの組み合わせ**として、複数のEvent-Driven Consumerを配置して、負荷を分散します。
 
 ## 関連パターン
 
-| パターン | 関係 |
-|---------|------|
-| [[programming/reactive_messaging_pattern/chapter9/polling_consumer\|Polling Consumer]] | Event-Driven Consumerの対となるパターン。明示的にメッセージを要求する |
-| [[programming/reactive_messaging_pattern/chapter9/competing_consumers\|Competing Consumers]] | 複数のEvent-Driven Consumerが同じチャネルから消費する |
-| [[programming/reactive_messaging_pattern/chapter9/message_dispatcher\|Message Dispatcher]] | Event-Driven Consumerにメッセージをディスパッチする |
-| [[programming/reactive_messaging_pattern/chapter9/message_selector\|Selective Consumer]] | 特定の条件に一致するメッセージのみを処理する |
-| [[programming/reactive_messaging_pattern/chapter9/transactional_client\|Transactional Client]] | メッセージ処理をトランザクション内で行う |
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/polling_consumer|Polling Consumer]]** - Event-Driven Consumerの対となるパターンです。コンシューマーが明示的にメッセージを要求します。アプリケーションの要件に応じて、どちらのパターンが適切かを選択します。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/competing_consumers|Competing Consumers]]** - 複数のEvent-Driven Consumerが同じチャネルからメッセージを受け取る場合、Competing Consumersパターンが形成されます。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/message_dispatcher|Message Dispatcher]]** - Message DispatcherがEvent-Driven Consumerにメッセージをディスパッチします。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/selective_consumer|Selective Consumer]]** - Event-Driven Consumerが特定の条件に一致するメッセージのみを処理する場合、Selective Consumerパターンと組み合わせます。
+
+- **[[programming/reactive_messaging_pattern/chapter9/gateways/transactional_client|Transactional Client]]** - メッセージ処理をトランザクション内で行いたい場合に組み合わせます。
 
 ## 参考資料
 

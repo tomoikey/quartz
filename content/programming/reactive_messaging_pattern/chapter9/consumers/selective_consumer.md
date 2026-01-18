@@ -2,63 +2,105 @@
 
 ## パターンの概要
 
-```mermaid
-graph LR
-    S[Sender] -->|Message with<br/>selection value| CH[Channel]
-    CH --> SC[Selective<br/>Consumer]
-    SC -->|matches criteria| PROC[Process]
-    SC -.->|doesn't match| SKIP[Skip]
-
-    style SC fill:#ffcc80
-```
+Selective Consumer（選択的コンシューマー）は、メッセージチャネルから特定の条件に一致するメッセージのみを受け取るパターンです。コンシューマーはすべてのメッセージを処理するのではなく、事前に定義された基準に基づいてメッセージをフィルタリングし、関心のあるメッセージのみを受け取って処理します。
 
 ## EIPにおけるSelective Consumer
 
-Selective Consumer（選別的コンシューマー）は、メッセージチャネルから特定の条件に一致するメッセージのみを受け取るパターンである。
+### 解決すべき問題
 
-### 問題
+アプリケーションがメッセージングを使用しており、メッセージチャネルからメッセージを消費していますが、**チャネル上のすべてのメッセージではなく、特定の条件に合致したメッセージのみを受け取りたい**という要件があります。
 
-アプリケーションがメッセージングを使用しており、メッセージチャネルからメッセージを消費しているが、すべてのメッセージではなく、特定の条件に合致したメッセージのみを受け取りたい。
+例えば、以下のようなシナリオを考えてみましょう。
+
+**地域別の注文処理**では、注文処理システムが複数の地域をサポートしている場合、各処理サーバーは自分が担当する地域の注文のみを処理したい場合があります。東日本サーバーは東日本の注文のみ、西日本サーバーは西日本の注文のみを受け取ります。
+
+**優先度に基づく処理**では、メッセージに優先度が設定されており、高優先度メッセージ専用のコンシューマーと、低優先度メッセージ専用のコンシューマーを分けたい場合があります。
+
+**メッセージタイプ別の処理**では、単一のチャネルに複数種類のメッセージが流れており、各コンシューマーが特定のタイプのメッセージのみを処理したい場合があります。
 
 ### 解決策
 
-メッセージコンシューマーを選別的にする。チャネルから配信されたメッセージをフィルタリングし、特定の基準に一致するものだけを受け取る。
+メッセージコンシューマーを**選択的**にします。チャネルから配信されたメッセージをフィルタリングし、特定の基準に一致するものだけを受け取ります。
 
-このフィルタリングプロセスは3つの要素で構成される：
+このフィルタリングプロセスは三つの要素で構成されます。
 
-1. **送信元による指定** - メッセージの選別値を送信前に設定
-2. **選別値** - メッセージに含まれる、コンシューマーが選別判定に用いる値
-3. **選別的コンシューマー** - 選別基準に合致するメッセージのみを受信
+**送信元による指定**として、メッセージの送信者が、コンシューマーによるフィルタリングに使用される「選択値」をメッセージに設定します。例えば、注文メッセージに地域コードを設定します。
 
-### 特徴
+**選択値**として、メッセージ内に含まれる、コンシューマーが選択判定に使用する値です。これはメッセージヘッダーの一部として設定されることが多いです。
 
-- **Point-to-Pointチャネルでの動作**: 複数のSelective ConsumerはCompeting Consumersとして機能し、基準が重複する場合、いずれかが該当メッセージを消費できる
-- **Publish-Subscribeチャネルでの動作**: 各サブスクライバーはメッセージのコピーを受け取るが、基準に合致しないものは無視する
-- **複数チャネルの効率化**: 単一チャネルを複数のDatatype Channelのように機能させることができる
+**選択的コンシューマー**として、選択基準を持ち、その基準に合致するメッセージのみを受信するコンシューマーです。例えば、「地域コード = 東日本」という基準を持つコンシューマーは、東日本の注文のみを受け取ります。
+
+### チャネルタイプによる動作の違い
+
+Selective Consumerの動作は、使用するチャネルのタイプによって異なります。
+
+**Point-to-Pointチャネル**では、複数のSelective ConsumerはCompeting Consumersとして機能します。メッセージの選択基準が重複している場合、いずれかのコンシューマーがメッセージを消費できます。重要なのは、少なくとも一つのコンシューマーが各メッセージを受け入れられるように設計することです。どのコンシューマーの基準にも合致しないメッセージは、消費されずにチャネルに残ってしまう可能性があります。
+
+**Publish-Subscribeチャネル**では、各サブスクライバーはメッセージのコピーを受け取りますが、基準に合致しないものは無視します。メッセージングシステムによっては、最適化としてコンシューマーが無視するメッセージの配信をスキップすることもあります。
+
+### 複数チャネルの代替としての使用
+
+Selective Consumerパターンを使用すると、単一のチャネルを複数のDatatype Channelのように機能させることができます。
+
+例えば、TypeA、TypeB、TypeCの三種類のメッセージがあり、それぞれに専用のコンシューマーが必要な場合を考えます。三つの別々のチャネルを作成する代わりに、単一のチャネルに三つのSelective Consumerを配置できます。各コンシューマーは自分が処理すべきメッセージタイプのみを選択します。
+
+このアプローチは、チャネル管理のオーバーヘッドを減らし、システムの構成を単純化できます。
 
 ## アクターモデルにおけるSelective Consumer
 
-アクターが様々な種類のメッセージを受信できるが、一部のメッセージタイプしか処理できない場合にSelective Consumerを使用する。この場合、Selective ConsumerはMessage Filterの一種であり、サポートされているメッセージのみがシステムによって消費されるようにする。Message Filterの議論でSelective Consumerの例を見ることができる。
+### Message Filterとしての役割
 
-### Datatype Channelとしての使用
+アクターモデルでは、Selective ConsumerはMessage Filterの一種として機能します。アクターが様々な種類のメッセージを受信できるが、一部のメッセージタイプしか処理できない場合に使用します。
 
-また、Selective Consumerをデータ型コンシューマーの代わりに様々な種類のメッセージを受け入れるように設計することも可能である。この場合、Selective Consumerアクターは様々な種類のメッセージをDatatype Channelsにルーティングする。このアプローチはDynamic Routerで示されている。
+アクターのreceiveハンドラーで、処理対象のメッセージタイプにのみマッチするパターンを定義することで、Selective Consumerを実現できます。マッチしないメッセージは、破棄するか、別のハンドラーに委譲するか、デッドレターキューに送信するかを決定します。
 
-### 実装アプローチ
+### Datatype Channelへのルーティング
 
-Selective Consumerは、特定のメッセージタイプごとに専用のコンシューマーアクターを作成し、SelectiveConsumerアクターがメッセージを受信してそれぞれのタイプ別コンシューマーに転送する形で実装できる。
+Selective Consumerを、各メッセージタイプ専用のコンシューマー（Datatype Channel）へのルーターとして設計することも可能です。
 
-3つのメッセージタイプコンシューマーが作成され、それぞれが特定のメッセージタイプの内部Datatype Channelsとなる。SelectiveConsumerが作成されると、3つのメッセージ（MessageTypeA、MessageTypeB、MessageTypeC）が送信される。これらはSelectiveConsumerによって受信され、Datatype Channelsにディスパッチされる。
+この設計では、SelectiveConsumerアクターが様々な種類のメッセージを受け入れ、メッセージタイプに基づいて適切な専用コンシューマーにルーティングします。これは、Dynamic Routerパターンの一種と見なすこともできます。
+
+**実装の構成**としては以下のようになります。
+
+1. 各メッセージタイプ（TypeA、TypeB、TypeC）に対応するコンシューマーアクターを作成します
+2. SelectiveConsumerアクターは、受信したメッセージのタイプを判定し、適切なコンシューマーに転送します
+3. 各コンシューマーは自分専用のメッセージタイプのみを処理します
+
+### パターンマッチングの活用
+
+Scalaのパターンマッチング機能を使用すると、Selective Consumerを簡潔に実装できます。
+
+receiveハンドラーで、処理対象のメッセージタイプに対するケースを定義し、それ以外のメッセージは別のケース（デフォルトハンドラー）で処理します。これにより、型安全で読みやすいSelective Consumerが実現できます。
+
+## Selective Consumerの設計考慮事項
+
+### 選択基準の設計
+
+選択基準は、明確で一意的であるべきです。曖昧な基準は、メッセージが複数のコンシューマーに処理されたり、どのコンシューマーにも処理されなかったりする問題を引き起こす可能性があります。
+
+**排他的な基準**として、各メッセージが正確に一つのコンシューマーの基準にのみ合致するように設計します。これにより、メッセージの処理責任が明確になります。
+
+**網羅的な基準**として、すべての可能なメッセージが、少なくとも一つのコンシューマーの基準に合致するように設計します。どの基準にも合致しないメッセージが発生しないようにします。
+
+### パフォーマンスへの影響
+
+Selective Consumerは、メッセージングシステムまたはコンシューマー自身がメッセージをフィルタリングするオーバーヘッドを発生させます。
+
+**メッセージングシステムによるフィルタリング**では、メッセージがコンシューマーに配信される前にフィルタリングが行われるため、ネットワークトラフィックとコンシューマーの処理負荷が軽減されます。
+
+**コンシューマーによるフィルタリング**では、すべてのメッセージがコンシューマーに配信され、コンシューマーが不要なメッセージを破棄します。これはネットワークトラフィックが増加しますが、実装がシンプルになる場合があります。
 
 ## 関連パターン
 
-| パターン | 関係 |
-|---------|------|
-| [[programming/reactive_messaging_pattern/chapter7/simple-routers/message_filter\|Message Filter]] | Selective Consumerと似ているが、パイプライン内のフィルターとして機能する |
-| [[programming/reactive_messaging_pattern/chapter9/competing_consumers\|Competing Consumers]] | 複数のSelective ConsumerがPoint-to-Pointチャネルで競合する |
-| [[programming/reactive_messaging_pattern/chapter9/event_driven_consumer\|Event-Driven Consumer]] | Selective Consumerはイベント駆動で動作できる |
-| [[programming/reactive_messaging_pattern/chapter7/simple-routers/dynamic_router\|Dynamic Router]] | 動的なルーティングルールを持つSelective Consumer |
-| [[programming/reactive_messaging_pattern/chapter9/durable_subscription\|Durable Subscriber]] | 選別条件を満たすメッセージの永続的なサブスクリプション |
+- **[[programming/reactive_messaging_pattern/chapter7/simple-routers/message_filter|Message Filter]]** - Selective Consumerと似ていますが、Message Filterはパイプライン内のフィルターとして機能し、条件に合致しないメッセージを削除します。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/competing_consumers|Competing Consumers]]** - Point-to-Pointチャネルで複数のSelective Consumerが存在する場合、Competing Consumersとして動作します。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/event_driven_consumer|Event-Driven Consumer]]** - Selective Consumerは通常、Event-Driven Consumerとして実装され、メッセージ到着時にフィルタリングを行います。
+
+- **[[programming/reactive_messaging_pattern/chapter7/simple-routers/dynamic_router|Dynamic Router]]** - 動的なルーティングルールを持つSelective Consumerは、Dynamic Routerパターンと密接に関連しています。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/durable_subscription|Durable Subscriber]]** - 選択条件を満たすメッセージの永続的なサブスクリプションを実現するために組み合わせます。
 
 ## 参考資料
 

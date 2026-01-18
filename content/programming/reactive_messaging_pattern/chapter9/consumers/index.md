@@ -1,16 +1,75 @@
 # Consumers (コンシューマーパターン)
 
-メッセージを受信・消費するためのパターン集です。
+## コンシューマーパターンとは
 
-## パターン一覧
+コンシューマーパターンは、メッセージをどのように受信し、消費するかに焦点を当てたパターン群です。エンタープライズ統合において、メッセージの「受信」は単純な操作のように見えますが、実際には様々な要件や制約を考慮する必要があります。
 
-| パターン | 説明 |
-|---------|------|
-| [[programming/reactive_messaging_pattern/chapter9/consumers/polling_consumer\|Polling Consumer]] | リソース情報が提供されるまでポーリングするパターン |
-| [[programming/reactive_messaging_pattern/chapter9/consumers/event_driven_consumer\|Event-Driven Consumer]] | 送られてきたメッセージにリアクティブに反応するパターン |
-| [[programming/reactive_messaging_pattern/chapter9/consumers/competing_consumers\|Competing Consumers]] | 複数のメッセージに同時に反応する特殊なグループパターン |
-| [[programming/reactive_messaging_pattern/chapter9/consumers/selective_consumer\|Selective Consumer]] | 特定のメッセージタイプのみを処理するフィルタリングパターン |
-| [[programming/reactive_messaging_pattern/chapter9/consumers/durable_subscription\|Durable Subscriber]] | リスニングしていない間のメッセージも逃さないパターン |
-| [[programming/reactive_messaging_pattern/chapter9/consumers/idempotent_receiver\|Idempotent Receiver]] | 同じメッセージを複数回受信しても問題ないように設計するパターン |
-| [[programming/reactive_messaging_pattern/chapter9/consumers/message_dispatcher\|Message Dispatcher]] | ワークロードに応じてメッセージを適切な処理担当に振り分けるパターン |
-| [[programming/reactive_messaging_pattern/chapter9/consumers/service_activator\|Service Activator]] | メッセージを受け取ってビジネスロジックを呼び出すパターン |
+メッセージを受信するタイミングをアプリケーションが制御したいのか、それともメッセージの到着に反応して自動的に処理を開始したいのか。複数のコンシューマーで負荷を分散したいのか、特定の条件を満たすメッセージだけを処理したいのか。コンシューマーが一時的にオフラインになった場合にメッセージを見逃さないようにしたいのか。同じメッセージが複数回配信された場合にどう対処するのか。
+
+コンシューマーパターンは、これらの様々な要件に対応するための設計指針を提供します。
+
+## なぜコンシューマーパターンが重要なのか
+
+### メッセージ消費の制御
+
+メッセージングシステムを設計する際に避けて通れない課題の一つが、**スロットリング**（メッセージ消費速度の制御）です。メッセージがチャネルに追加される速度と、アプリケーションがそれを処理できる速度は必ずしも一致しません。
+
+処理能力を超える速度でメッセージが到着すると、システムは過負荷状態に陥ります。逆に、メッセージの到着を待ってリソースを無駄にすることも避けたいところです。コンシューマーパターンは、この「いつ、どのように」メッセージを消費するかという問題に対する様々なアプローチを提供します。
+
+### 信頼性と耐久性
+
+分散システムでは、コンポーネントの一時的な障害は避けられません。コンシューマーがオフラインになった場合にメッセージを見逃さないようにする方法、ネットワークの問題で同じメッセージが複数回配信された場合に正しく処理する方法など、信頼性に関する考慮事項が多数あります。
+
+### スケーラビリティ
+
+単一のコンシューマーでは処理能力が不足する場合、複数のコンシューマーで負荷を分散する必要があります。しかし、複数のコンシューマーが同じチャネルからメッセージを消費する場合、どのコンシューマーがどのメッセージを処理するかを適切に調整する必要があります。
+
+## パターンの分類
+
+コンシューマーパターンは、その役割に応じていくつかのグループに分類できます。
+
+### メッセージ取得方式
+
+メッセージをどのようなタイミングで取得するかに関するパターンです。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/polling_consumer|Polling Consumer]]** - アプリケーションが明示的にメッセージを要求する方式です。「新しいメッセージはありますか？」と定期的に確認を行います。アプリケーションがメッセージ消費のタイミングを完全に制御できる反面、ポーリング間隔の調整が必要です。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/event_driven_consumer|Event-Driven Consumer]]** - メッセージの到着がイベントとしてコンシューマーを起動する方式です。メッセージが届くまでコンシューマーはアクティブなスレッドを持たず、リソース効率が高いという特徴があります。アクターモデルでは、すべてのアクターが本質的にこの方式で動作します。
+
+### スケーリングと負荷分散
+
+複数のコンシューマーでメッセージ処理を分散するためのパターンです。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/competing_consumers|Competing Consumers]]** - 複数のコンシューマーが同じPoint-to-Pointチャネルからメッセージを競合的に取得する方式です。メッセージングシステムがどのコンシューマーにメッセージを配信するかを決定します。水平スケーリングの基本的なパターンです。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/message_dispatcher|Message Dispatcher]]** - チャネルからメッセージを取得し、適切なパフォーマー（処理担当者）に振り分けるパターンです。Content-Based Routerと似ていますが、Message Dispatcherはパフォーマーのワークロードにも関心を持ち、負荷が均等になるように配信します。
+
+### メッセージの選択とフィルタリング
+
+特定の条件を満たすメッセージのみを処理するためのパターンです。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/selective_consumer|Selective Consumer]]** - チャネルから配信されるメッセージをフィルタリングし、特定の基準に一致するものだけを受け取るパターンです。単一のチャネルを複数の論理的なDatatype Channelのように機能させることができます。
+
+### 信頼性と耐久性
+
+メッセージ処理の信頼性を確保するためのパターンです。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/durable_subscription|Durable Subscriber]]** - コンシューマーがメッセージをリッスンしていない間に発行されたメッセージを、メッセージングシステムに保存させるパターンです。コンシューマーが再接続したときに、見逃したメッセージを受け取ることができます。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/idempotent_receiver|Idempotent Receiver]]** - 同じメッセージを複数回受信しても、副作用が一度しか発生しないように設計されたコンシューマーです。「少なくとも1回の配信」を保証する環境では、重複配信が発生する可能性があるため、このパターンが重要になります。
+
+### サービス統合
+
+メッセージングとアプリケーションサービスを接続するためのパターンです。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/service_activator|Service Activator]]** - メッセージチャネル上のメッセージをアプリケーションサービスの呼び出しに変換するパターンです。メッセージング技術と非メッセージング技術の両方から同じサービスを利用可能にする場合に使用します。Hexagonal（Ports and Adapters）アーキテクチャにおける「アダプター」の役割を果たします。
+
+## パターンの組み合わせ
+
+実際のシステムでは、これらのパターンを組み合わせて使用することが一般的です。
+
+例えば、負荷分散が必要なシステムでは、**Competing Consumers**を使用して複数のコンシューマーを配置します。各コンシューマーは**Event-Driven Consumer**として動作し、メッセージの到着に反応して処理を開始します。信頼性が求められる場合は、各コンシューマーを**Idempotent Receiver**として設計し、重複配信に対応します。
+
+また、**Message Dispatcher**が**Selective Consumer**としても機能し、メッセージの内容に基づいて適切なパフォーマーにルーティングしながら、各パフォーマーのワークロードも考慮するといった構成も可能です。
+
+重要なのは、解決すべき問題の特性を理解し、適切なパターンの組み合わせを選択することです。

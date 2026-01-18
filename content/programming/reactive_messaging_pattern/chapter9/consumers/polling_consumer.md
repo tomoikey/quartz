@@ -2,279 +2,127 @@
 
 ## パターンの概要
 
-```mermaid
-sequenceDiagram
-    participant C as Consumer
-    participant CH as Channel
-
-    C->>CH: receive()
-    Note over C: ブロックして待機
-    CH-->>C: Message
-    C->>C: 処理
-    C->>CH: receive()
-    CH-->>C: Message
-```
+Polling Consumerは、アプリケーションが明示的にメッセージ受信要求を行う消費方式です。メッセージの到着を待つのではなく、アプリケーション側から「新しいメッセージはありますか？」と能動的に問い合わせます。このパターンは「同期的受信者（Synchronous Receiver）」とも呼ばれ、受信スレッドはメッセージが取得されるまでブロックすることがあります。
 
 ## EIPにおけるPolling Consumer
 
-Polling Consumerは、アプリケーションが明示的にメッセージ受信要求を行うメッセージ消費方式である。
+### 解決すべき問題
 
-### 問題
+アプリケーションがメッセージを消費する必要がありますが、**消費するタイミングを自分でコントロールしたい**という要件があります。
 
-アプリケーションは準備ができた時点でメッセージを消費する必要がある。アプリケーションがメッセージ受信のタイミングをコントロールしたい場合、どのように実装するか。
+例えば、以下のようなシナリオを考えてみましょう。
+
+**バッチ処理システム**では、深夜の特定時刻にのみメッセージを処理したい場合があります。日中はメッセージを蓄積しておき、夜間のバッチウィンドウで一括処理するようなケースです。
+
+**リソース制約のあるシステム**では、他の重要なタスクが完了してからメッセージを処理したい場合があります。メモリやCPUに余裕があるときだけメッセージを取得することで、システムの安定性を保ちます。
+
+**スロットリングが必要なシステム**では、処理能力に応じてメッセージ取得のペースを調整したい場合があります。過負荷を避けるために、処理が完了してから次のメッセージを取得します。
 
 ### 解決策
 
-Polling Consumerを使用し、受信スレッドが明示的にメッセージを要求する際にのみメッセージを取得する。
+**Polling Consumer**を使用し、アプリケーションが準備完了になったときに明示的にメッセージを要求します。
 
-### 特徴
+Polling Consumerでは、アプリケーションが明示的にリクエストしたときだけメッセージを返します。メッセージングシステムからメッセージを取得する具体的な方法は実装によって異なりますが、共通しているのは「アプリケーションが要求するまでメッセージを受け取らない」という点です。
 
-- 同期型受信者として機能する
-- アプリケーションが受信準備完了時に呼び出しを実行する
-- 多くのメッセージングAPIで`receive()`メソッドを提供する
-- メッセージが利用不可能な場合、`receiveNoWait()`や`Receive(0)`で即座に制御を返す
+### Polling Consumerの動作特性
+
+**同期的な受信方式**として、receive()メソッドを呼び出すと、メッセージが利用可能になるまで呼び出しスレッドがブロックされることがあります。これは「同期的受信者（Synchronous Receiver）」と呼ばれる所以です。
+
+**ノンブロッキングオプション**として、多くのメッセージングAPIは、メッセージが利用できない場合に即座に制御を返すreceiveNoWait()やreceive(timeout=0)のようなメソッドも提供しています。これにより、スレッドを長時間ブロックすることなくポーリングが可能です。
+
+**消費タイミングの制御**として、アプリケーションはメッセージを処理する準備ができたときにのみreceive()を呼び出します。これにより、メッセージ消費のタイミングを完全にコントロールできます。
 
 ## アクターモデルにおけるPolling Consumer
 
-ポーリングは、リソースから情報を要求するコンシューマーがリソース情報が提供されるまでブロックすることを必要とする。アクターモデルではアクター間のコラボレーションがブロックしないため、あるアクターが別のアクターに情報をポーリングする方法は存在しない。アクターが他のアクターから情報を得る唯一の方法はRequest-Replyを使用することである。
+### アクターモデルの特性との関係
 
-### アクター間のPolling Consumer
+従来のポーリングは、リソースから情報を要求するコンシューマーが、リソース情報が提供されるまで**ブロックする**ことを前提としています。しかし、アクターモデルでは、アクター間のコラボレーションはブロックしないという原則があります。
 
-典型的な手続き型ポーリング環境では、Work ConsumerがWork Items Providerに対してWork Itemsを要求する。Work ConsumerはWork Items Providerが要求されたWork Itemsを割り当てて返すまでブロックする。アクターモデルでは、Work ConsumerがWork Item ProviderにWork Itemsを割り当てるよう伝えると、Work Consumerは自身のスレッドで操作を継続し、Work Item Providerへのリクエストは（長くても短くても）一定期間後にしか受信されない。
+したがって、純粋なアクターモデルでは、あるアクターが別のアクターに対して「同期的に」情報をポーリングすることはできません。アクターが他のアクターから情報を得る唯一の方法は、**Request-Reply**パターンを使用することです。
 
-Request-Replyを使用して同様の結果を達成できる。Work ConsumerがWork Items ProviderからWork Itemsを要求し、取得するように設計する。
+### Request-Replyによるポーリングの模倣
 
-### 実装例
+アクター間のPolling Consumerを実現するために、Request-Replyパターンを活用できます。
 
-以下はRequest-Replyを使ったPolling Consumer的な実装である。
+典型的な手続き型ポーリング環境では、Work Consumer（作業消費者）がWork Items Provider（作業提供者）に対してWork Items（作業項目）を要求し、Work Items Providerが要求されたWork Itemsを割り当てて返すまでブロックします。
 
-```scala
-package co.vaughnvernon.reactiveenterprise.pollingconsumer
+アクターモデルでは、この相互作用は異なる形で実現されます。
 
-import scala.collection.immutable.List
-import akka.actor._
-import co.vaughnvernon.reactiveenterprise._
+1. Work ConsumerがWork Items Providerに「Work Itemsを割り当ててほしい」というリクエストメッセージを送信します
+2. Work Consumerは自身の処理を継続します（ブロックしません）
+3. Work Items Providerは、要求を処理し、割り当てたWork Itemsを含む応答メッセージをWork Consumerに送信します
+4. Work Consumerは応答メッセージを受信したときに、割り当てられたWork Itemsを処理します
 
-object PollingConsumerDriver extends CompletableApp(1) {
-  val workItemsProvider =
-    system.actorOf(
-      Props[WorkItemsProvider],
-      "workItemsProvider")
-  val workConsumer =
-    system.actorOf(
-      Props(classOf[WorkConsumer],
-        workItemsProvider),
-      "workConsumer")
+この方式では、厳密には「ポーリング」ではありませんが、同様の結果（必要なときに作業を要求する）を非同期的に達成できます。
 
-  workConsumer ! WorkNeeded()
+### ボランティアリングスタイル
 
-  awaitCompletion
-}
-```
+アクターモデルでのPolling Consumerの実装として、**ボランティアリングスタイル**が推奨されます。
 
-`PollingConsumerDriver`は`WorkItemsProvider`と`WorkConsumer`アクターを作成する。その後、`WorkConsumer`に`WorkNeeded`メッセージを送信して、作業の消費と実行のプロセスを開始する。
+このスタイルでは、各Work Consumerアクターが、さらなる作業が必要なときにWork Items Providerに「作業が必要です」と通知します。Work Items Providerは、利用可能な作業があれば、要求したコンシューマーに作業を割り当てます。
 
-`WorkConsumer`は2つのメッセージを定義する：`WorkNeeded`と`WorkOnItem`。`WorkNeeded`メッセージはクライアントから初期処理を開始するために送信でき、また`WorkConsumer`自身がさらなる作業が必要なときに送信する。`WorkOnItem`メッセージは`WorkConsumer`自身によってのみ送信され、処理すべき個別の`WorkItem`を示す。
+**処理の流れ**は以下のようになります。
 
-```scala
-case class WorkNeeded()
-case class WorkOnItem(workItem: WorkItem)
+1. クライアントがWork Consumerに「WorkNeeded（作業が必要）」メッセージを送信して処理を開始します
+2. Work ConsumerはWork Items Providerに「AllocateWorkItems（作業項目を割り当ててほしい）」メッセージを送信します
+3. Work Items Providerは要求された数の作業項目を割り当て、「WorkItemsAllocated（作業項目が割り当てられた）」イベントメッセージで応答します
+4. Work Consumerは受信した作業項目を処理し、処理が完了したら再び「WorkNeeded」メッセージを自身に送信して、サイクルを繰り返します
 
-class WorkConsumer(workItemsProvider: ActorRef)
-  extends Actor {
-  var totalItemsWorkedOn = 0
-
-  def performWorkOn(workItem: WorkItem) = {
-    totalItemsWorkedOn = totalItemsWorkedOn + 1
-    if (totalItemsWorkedOn >= 15) {
-      context.stop(self)
-      PollingConsumerDriver.completeAll
-    }
-  }
-
-  override def postStop() = {
-    context.stop(workItemsProvider)
-  }
-
-  def receive = {
-    case allocated: WorkItemsAllocated =>
-      println("WorkItemsAllocated...")
-      allocated.workItems map { workItem =>
-        self ! WorkOnItem(workItem)
-      }
-      self ! WorkNeeded()
-    case workNeeded: WorkNeeded =>
-      println("WorkNeeded...")
-      workItemsProvider ! AllocateWorkItems(5)
-    case workOnItem: WorkOnItem =>
-      println(s"Performed work on: ${workOnItem.workItem.name}")
-      performWorkOn(workOnItem.workItem)
-  }
-}
-```
-
-`WorkConsumer`が`WorkNeeded`メッセージを受信すると、初期化時に受け取った`WorkItemsProvider`を使用して、割り当てるべき作業アイテムの数を要求する。このために`AllocateWorkItems`メッセージを送信する。`WorkItemsProvider`がこれを受信すると、要求された数の`WorkItem`インスタンスを割り当て、Event Messageである`WorkItemsAllocated`を通じて要求者に送信する。
-
-```scala
-case class AllocateWorkItems(numberOfItems: Int)
-case class WorkItemsAllocated(workItems: List[WorkItem])
-case class WorkItem(name: String)
-
-class WorkItemsProvider extends Actor {
-  var workItemsNamed: Int = 0
-
-  def allocateWorkItems(
-      numberOfItems: Int): List[WorkItem] = {
-    var allocatedWorkItems = List[WorkItem]()
-    for (itemCount <- 1 to numberOfItems) {
-      val nameIndex = workItemsNamed + itemCount
-      allocatedWorkItems =
-        allocatedWorkItems :+
-          WorkItem("WorkItem" + nameIndex)
-    }
-    workItemsNamed = workItemsNamed + numberOfItems
-    allocatedWorkItems
-  }
-
-  def receive = {
-    case request: AllocateWorkItems =>
-      sender !
-        WorkItemsAllocated(
-          allocateWorkItems(
-            request.numberOfItems))
-  }
-}
-```
-
-`WorkConsumer`が`WorkItemsAllocated`メッセージを受信すると、コンシューマーは作業を個々の`WorkOnItem`タスクに分割し、各`WorkItem`に対して自身にメッセージを送信する。そして`WorkItemsAllocated`への反応を完了するために、新たな`WorkNeeded`メッセージを自身に送信する。この`WorkNeeded`メッセージは、もう`WorkOnItem`タスクが残っていない時点で受信される。
-
-出力例：
-
-```
-WorkNeeded...
-WorkItemsAllocated...
-Performed work on: WorkItem1
-Performed work on: WorkItem2
-Performed work on: WorkItem3
-Performed work on: WorkItem4
-Performed work on: WorkItem5
-WorkNeeded...
-WorkItemsAllocated...
-Performed work on: WorkItem6
-...
-```
-
-15個の`WorkItem`タスクが実行されると、`WorkConsumer`は停止する。`WorkConsumer`の`postStop()`関数で、`WorkItemsProvider`も停止される。
-
-この例では`WorkConsumer`のインスタンスを1つだけ作成しているが、ホストコンピュータのコア数だけ`WorkConsumer`を作成することも可能である。これにより、すべての`WorkConsumer`アクターが同時に作業を処理できる。
-
-このアプローチはMessage Dispatcherのボランティアリングスタイルを提供する。各`WorkConsumer`アクターは、さらなる作業が必要なときに`WorkItemsProvider`に通知する必要がある。Akka標準の`BalancingDispatcher`を使用する場合よりもメッセージ送信が多くなるが、このアプローチはMessage Dispatcherで議論されている1つ以上のAkka標準ツールを使用するために必要なチェックのオーバーヘッドを取り除く。このボランティアリングスタイルはAkka内部の知識を必要としない。
+**このアプローチの利点**として、複数のWork Consumerインスタンスを作成することで、自然に並列処理が可能になります。例えば、ホストコンピュータのコア数だけWork Consumerを作成し、すべてのコンシューマーが同時に作業を処理できます。
 
 ## リソースポーリング
 
-アクター間のPolling Consumerを大まかに近似する方法を見てきたが、次に非アクターリソースをポーリングする必要があるアクターベースのPolling Consumerの設計を考える。アクセスが注意深く設計されていない限り、ポーリングアクターのスレッドが望ましいリソース上で長時間ブロックし、システムの無応答性を引き起こす可能性があるため、これは特に厄介な状況である。
+### 非アクターリソースのポーリング
 
-### EvenNumberDevice の例
+アクター間のPolling Consumerの実現方法を見てきましたが、実際のシステムでは、アクターが非アクターリソース（ハードウェアデバイス、外部API、ファイルシステムなど）をポーリングする必要がある場合もあります。
 
-この例では、偶数を提供する特別な「デバイス」である`EvenNumberDevice`を監視する。
+この状況は特に厄介です。なぜなら、ポーリングアクターのスレッドが望ましいリソース上で長時間ブロックし、システム全体の無応答性を引き起こす可能性があるからです。
 
-```scala
-class EvenNumberDevice() {
-  val random = new Random(99999)
+### タイムアウトとバックオフ戦略
 
-  def nextEvenNumber(waitFor: Int): Option[Int] = {
-    val timeout = new Timeout(waitFor)
-    var nextEvenNumber: Option[Int] = None
+非アクターリソースをポーリングする際には、以下の戦略が有効です。
 
-    while (!timeout.isTimedOut && nextEvenNumber.isEmpty) {
-      Thread.sleep(waitFor / 2)
+**タイムアウトの設定**として、リソースへのアクセスには必ずタイムアウトを設定します。無限にブロックする可能性のある操作は避け、一定時間内に結果が得られない場合は制御を返すようにします。
 
-      val number = random.nextInt(100000)
+**エクスポネンシャルバックオフ**として、連続してリソースアクセスに失敗した場合、次のポーリング間隔を指数関数的に増加させます。これにより、一時的に利用できないリソースに対する無駄なポーリングを減らし、リソースの回復時間を与えます。
 
-      if (number % 2 == 0) nextEvenNumber = Option(number)
-    }
+**キャップ付きバックオフ**として、バックオフ間隔には上限（キャップ）を設定します。例えば、最小500ミリ秒から開始し、失敗するたびに2倍にしていきますが、最大15秒を超えないようにします。リソースへのアクセスが成功したら、間隔を最小値にリセットします。
 
-    nextEvenNumber
-  }
+### スケジューラーの活用
 
-  def nextEvenNumber(): Option[Int] = {
-    nextEvenNumber(-1)
-  }
-}
-```
+アクターがリソースをポーリングする際、Akkaのスケジューラーを活用して定期的にポーリングメッセージを送信できます。
 
-このデバイスはランダムな数を生成し、偶数であれば最初に見つかったものを返す。2つのオーバーロードされたAPI関数がある。1つは決してタイムアウトしない関数で、もう1つは指定されたミリ秒数でタイムアウトする関数である。タイムアウト期間内に偶数を読み取れない場合、`None`の`Option`が返される。アクターは常に`nextEvenNumber(waitFor: Int)`バージョンの関数を呼び出すべきである。
+スケジューラーは、指定された間隔の後にアクターにメッセージを送信します。このメッセージを受信したアクターは、リソースへのポーリングを実行します。ポーリングが成功した場合は短い間隔で次のポーリングをスケジュールし、失敗した場合はバックオフして長い間隔でスケジュールします。
 
-### CappedBackOffScheduler
+この方式により、アクターのスレッドが長時間ブロックされることを防ぎながら、リソースの状態に応じた適応的なポーリングが可能になります。
 
-`EvenNumberMonitor`アクターは、構築時に`CappedBackOffScheduler`のインスタンスを作成する。このスケジューラーは、監視アクターに間隔を置いて`Monitor`メッセージを送信するために使用される。間隔は最小500ミリ秒から開始する。デバイスへの任意のプローブが偶数の読み取りに成功すると、次の間隔は500ミリ秒になる。それ以外の場合、連続した読み取り失敗ごとに次の間隔が2倍になる。
+## Polling Consumerの利点と欠点
 
-```scala
-class CappedBackOffScheduler(
-    minimumInterval: Int,
-    maximumInterval: Int,
-    system: ActorSystem,
-    receiver: ActorRef,
-    message: Any) {
+### 利点
 
-  var interval = minimumInterval
+**消費タイミングの完全な制御**として、アプリケーションは自身の都合の良いタイミングでメッセージを取得できます。過負荷を避けたり、特定の時間帯にのみ処理を行ったりする柔軟性があります。
 
-  def backOff = {
-    interval = interval * 2
-    if (interval > maximumInterval)
-      interval = maximumInterval
-    schedule
-  }
+**バックプレッシャーの自然な実現**として、コンシューマーは処理能力に応じてメッセージを取得するため、自然にバックプレッシャー（上流への押し戻し）が実現されます。
 
-  def reset = {
-    interval = minimumInterval
-    schedule
-  }
+**トランザクションとの統合**として、メッセージの取得をアプリケーションのトランザクション境界内で行いやすくなります。
 
-  private def schedule = {
-    val duration =
-      Duration.create(
-        interval,
-        TimeUnit.MILLISECONDS)
+### 欠点
 
-    system
-      .scheduler
-      .scheduleOnce(
-        duration,
-        receiver,
-        message)
-  }
-}
-```
+**レイテンシの増加**として、メッセージは次のポーリングまで処理されないため、Event-Driven Consumerと比較してレイテンシが高くなる可能性があります。
 
-スケジューラーが`backOff`を指示されるたびに、少なくとも15秒に達するまで新しい間隔を計算する。スケジューラーが`reset`を指示されると（偶数の読み取りが成功するたびに）、間隔は0.5秒に設定される。いずれの場合も、間隔を使用して新しい`Monitor`メッセージをスケジュールする。`Monitor`メッセージは間隔が経過すると`EvenNumberMonitor`に送信される。
+**リソースの無駄遣い**として、メッセージがない場合でもポーリングが行われるため、リソースが無駄になる可能性があります。
 
-出力例：
-
-```
-EVEN: 65290
-EVEN: 67208
-EVEN: 53130
-MISS
-MISS
-EVEN: 63720
-EVEN: 1810
-EVEN: 25708
-MISS
-EVEN: 38840
-EVEN: 92860
-EVEN: 78328
-EVEN: 87076
-```
+**ポーリング間隔の調整**として、適切なポーリング間隔を見つけることが難しい場合があります。間隔が短すぎるとリソースを消費し、長すぎるとレイテンシが増加します。
 
 ## 関連パターン
 
-| パターン | 関係 |
-|---------|------|
-| Request-Reply | アクターモデルでPolling Consumerを模倣するために使用する |
-| Event-Driven Consumer | Polling Consumerの対となるパターン。メッセージ到着時に自動的に呼び出される |
-| Competing Consumers | 複数のPolling Consumerが同一チャネルから消費する場合に形成される |
-| Message Dispatcher | ワークロードに関心を持ち、応答可能なアクターにメッセージをディスパッチする |
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/event_driven_consumer|Event-Driven Consumer]]** - Polling Consumerの対となるパターンです。メッセージの到着時に自動的にコンシューマーが呼び出されます。アプリケーションの要件に応じて、どちらのパターンが適切かを選択します。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/competing_consumers|Competing Consumers]]** - 複数のPolling Consumerが同じチャネルからメッセージを取得する場合、自然にCompeting Consumersパターンが形成されます。
+
+- **[[programming/reactive_messaging_pattern/chapter9/consumers/message_dispatcher|Message Dispatcher]]** - ボランティアリングスタイルのPolling Consumerは、Message Dispatcherと組み合わせて使用されることがあります。ワーカーが「作業が必要」と通知し、ディスパッチャーが適切な作業を割り当てます。
+
+- **Request-Reply** - アクターモデルでPolling Consumerを模倣するために使用される基本的なパターンです。
 
 ## 参考資料
 
