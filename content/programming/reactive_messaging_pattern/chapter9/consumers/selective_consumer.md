@@ -1,5 +1,24 @@
 # Selective Consumer (Message Selector)
 
+```mermaid
+graph LR
+    subgraph Channel
+        M1[Msg A]
+        M2[Msg B]
+        M3[Msg A]
+        M4[Msg C]
+    end
+
+    M1 --> CA[Consumer A<br/>selector: type=A]
+    M3 --> CA
+    M2 --> CB[Consumer B<br/>selector: type=B]
+    M4 --> CC[Consumer C<br/>selector: type=C]
+
+    style CA fill:#c8e6c9
+    style CB fill:#bbdefb
+    style CC fill:#fff9c4
+```
+
 ## パターンの概要
 
 Selective Consumer（選択的コンシューマー）は、メッセージチャネルから特定の条件に一致するメッセージのみを受け取るパターンです。コンシューマーはすべてのメッセージを処理するのではなく、事前に定義された基準に基づいてメッセージをフィルタリングし、関心のあるメッセージのみを受け取って処理します。

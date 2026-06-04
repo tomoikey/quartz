@@ -1,5 +1,19 @@
 # Transactional Client/Actor
 
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant TX as Transaction
+    participant CH as Channel
+
+    C->>TX: begin
+    C->>CH: send(msg)
+    Note over CH: メッセージは<br/>バッファリング
+    C->>TX: commit
+    TX->>CH: メッセージを<br/>実際に追加
+    Note over CH: 他から見える
+```
+
 ## パターンの概要
 
 Transactional Client/Actorは、メッセージの送受信にトランザクション境界を設定することで、データの整合性を保証するパターンです。アクターモデルのコンテキストでは、このパターンは送信側クライアントだけでなく、受信側アクターのトランザクション管理も含むため、Transactional Client/Actorと呼ばれます。

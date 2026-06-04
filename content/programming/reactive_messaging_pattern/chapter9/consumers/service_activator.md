@@ -1,5 +1,25 @@
 # Service Activator (Messaging Adapter)
 
+```mermaid
+graph LR
+    subgraph External
+        CH[Message<br/>Channel]
+    end
+
+    SA[Service<br/>Activator]
+
+    subgraph Internal
+        SVC[Service]
+    end
+
+    CH -->|Request| SA
+    SA -->|Invoke| SVC
+    SVC -->|Response| SA
+    SA -->|Reply| CH
+
+    style SA fill:#ffcc80
+```
+
 ## パターンの概要
 
 Service Activator（サービスアクティベーター）は、メッセージングチャネル上のメッセージをサービス呼び出しに接続するパターンです。「Messaging Adapter」とも呼ばれ、メッセージングインフラストラクチャと内部のビジネスサービスの間の橋渡し役として機能します。このパターンにより、サービスはメッセージング経由で呼び出されていることを意識することなく、様々な外部インターフェースからアクセス可能になります。

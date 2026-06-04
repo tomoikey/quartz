@@ -1,5 +1,19 @@
 # Polling Consumer
 
+```mermaid
+sequenceDiagram
+    participant C as Consumer
+    participant CH as Channel
+
+    C->>CH: receive()
+    Note over C: ブロック/待機
+    CH-->>C: Message
+    C->>C: Process
+    C->>CH: receive()
+    Note over C: ブロック/待機
+    CH-->>C: Message
+```
+
 ## パターンの概要
 
 Polling Consumerは、アプリケーションが明示的にメッセージ受信要求を行う消費方式です。メッセージの到着を待つのではなく、アプリケーション側から「新しいメッセージはありますか？」と能動的に問い合わせます。このパターンは「同期的受信者（Synchronous Receiver）」とも呼ばれ、受信スレッドはメッセージが取得されるまでブロックすることがあります。

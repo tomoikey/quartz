@@ -1,5 +1,23 @@
 # Idempotent Receiver
 
+```mermaid
+sequenceDiagram
+    participant S as Sender
+    participant R as Idempotent<br/>Receiver
+
+    S->>R: Message (ID: 123)
+    R->>R: Process & Store ID
+    R-->>S: Ack
+
+    S->>R: Message (ID: 123)
+    Note over R: 重複検出
+    R-->>S: Ack (処理スキップ)
+
+    S->>R: Message (ID: 456)
+    R->>R: Process & Store ID
+    R-->>S: Ack
+```
+
 ## パターンの概要
 
 Idempotent Receiver（冪等受信者）は、同じメッセージを複数回受信しても安全に処理できるように受信者を設計するパターンです。「冪等」という用語は数学に由来し、関数を繰り返し適用しても同じ結果が得られる性質を指します。メッセージングシステムにおいては、メッセージが1回受信されても複数回受信されても同じ効果をもたらし、メッセージを安全に再送信できることを意味します。

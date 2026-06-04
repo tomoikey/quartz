@@ -1,5 +1,18 @@
 # Event-Driven Consumer
 
+```mermaid
+sequenceDiagram
+    participant CH as Channel
+    participant C as Consumer
+
+    Note over C: 待機中（スレッドなし）
+    CH->>C: onMessage(msg1)
+    C->>C: Process
+    Note over C: 待機中（スレッドなし）
+    CH->>C: onMessage(msg2)
+    C->>C: Process
+```
+
 ## パターンの概要
 
 Event-Driven Consumerは、メッセージの到着がイベントとしてコンシューマーを起動する消費方式です。コンシューマーは明示的にメッセージを要求するのではなく、メッセージングシステムがメッセージをコンシューマーのコールバックに渡します。このパターンは「非同期受信者（Asynchronous Receiver）」とも呼ばれ、コンシューマーはコールバックスレッドがメッセージを配信するまでアクティブなスレッドを持ちません。

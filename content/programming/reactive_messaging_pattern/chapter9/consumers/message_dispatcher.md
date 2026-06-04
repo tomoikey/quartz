@@ -1,5 +1,15 @@
 # Message Dispatcher
 
+```mermaid
+graph LR
+    CH[Channel] --> D[Dispatcher]
+    D --> P1[Performer 1]
+    D --> P2[Performer 2]
+    D --> P3[Performer 3]
+
+    style D fill:#ffcc80
+```
+
 ## パターンの概要
 
 Message Dispatcher（メッセージディスパッチャー）は、チャネルからメッセージを取得し、処理を担当するパフォーマー（実行者）に配布するパターンです。ディスパッチャーは、複数のコンシューマーが単一のメッセージチャネル上で協調して動作するための調整役として機能します。このパターンにより、メッセージ処理の並行性を効率的に管理し、ワークロードを適切に分散させることができます。

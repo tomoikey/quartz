@@ -1,5 +1,18 @@
 # Competing Consumers
 
+```mermaid
+graph LR
+    subgraph Channel
+        Q[(Queue)]
+    end
+
+    Q --> C1[Consumer 1]
+    Q --> C2[Consumer 2]
+    Q --> C3[Consumer 3]
+
+    style Q fill:#e1f5fe
+```
+
 ## パターンの概要
 
 Competing Consumersは、複数のコンシューマーが単一のPoint-to-Pointチャネルからメッセージを競合的に取得するパターンです。各メッセージは一人のコンシューマーのみによって処理され、複数のコンシューマーが同時にメッセージを処理することで、システム全体のスループットを向上させます。このパターンは、水平スケーリングの基本的な手法として広く使用されています。

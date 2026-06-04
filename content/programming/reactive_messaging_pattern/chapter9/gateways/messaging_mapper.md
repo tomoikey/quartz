@@ -1,5 +1,23 @@
 # Messaging Mapper
 
+```mermaid
+graph LR
+    subgraph Domain
+        DO[Domain<br/>Object]
+    end
+
+    MM[Messaging<br/>Mapper]
+
+    subgraph Messaging
+        MSG[Message]
+    end
+
+    DO <-->|変換| MM
+    MM <-->|変換| MSG
+
+    style MM fill:#fff3e0
+```
+
 ## パターンの概要
 
 Messaging Mapperは、ドメインオブジェクトとメッセージング基盤の間でデータの変換を行うパターンです。このパターンを適用することで、オブジェクト指向の世界とメッセージングの世界という、根本的に異なる二つのパラダイム間でデータを移動させながら、両者の独立性を保つことができます。

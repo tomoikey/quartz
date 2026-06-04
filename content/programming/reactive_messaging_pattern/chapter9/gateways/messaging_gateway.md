@@ -1,5 +1,27 @@
 # Messaging Gateway
 
+```mermaid
+graph LR
+    subgraph Application
+        A[App Code]
+    end
+
+    subgraph Gateway
+        G[Messaging<br/>Gateway]
+    end
+
+    subgraph Messaging
+        CH[Channel]
+    end
+
+    A -->|"getCreditScore(id)"| G
+    G -->|Message| CH
+    CH -->|Message| G
+    G -->|"score"| A
+
+    style G fill:#fff3e0
+```
+
 ## パターンの概要
 
 Messaging Gatewayは、アプリケーションコードからメッセージング固有のコードをカプセル化し、ドメイン固有のメソッドを公開するパターンです。このパターンを適用することで、アプリケーションはメッセージングシステムの存在を意識することなく、ビジネス操作に集中できるようになります。

@@ -1,5 +1,24 @@
 # Durable Subscriber
 
+```mermaid
+sequenceDiagram
+    participant P as Publisher
+    participant B as Broker
+    participant S as Subscriber
+
+    S->>B: Subscribe (durable)
+    P->>B: Message 1
+    B->>S: Message 1
+    Note over S: 切断
+    P->>B: Message 2
+    P->>B: Message 3
+    Note over B: メッセージを保存
+    Note over S: 再接続
+    S->>B: Reconnect
+    B->>S: Message 2
+    B->>S: Message 3
+```
+
 ## パターンの概要
 
 Durable Subscriber（耐久的購読者）は、コンシューマーがメッセージをリッスンしていない間に発行されたメッセージを見逃さないようにするパターンです。メッセージングシステムがコンシューマーの代わりにメッセージを保存し、コンシューマーが再接続したときに、見逃したメッセージを配信します。
